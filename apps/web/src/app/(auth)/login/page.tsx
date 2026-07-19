@@ -77,7 +77,7 @@ export default function LoginPage() {
             <Dumbbell className="h-6 w-6 text-cyan-500" />
           </div>
           <div className="space-y-1">
-            <CardTitle className="text-2xl font-bold tracking-tight text-white">IronPulse Gym</CardTitle>
+            <CardTitle className="text-2xl font-bold tracking-tight text-white">Sunain Gym</CardTitle>
             <CardDescription className="text-slate-400">
               Sign in to the management suite
             </CardDescription>

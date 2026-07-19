@@ -86,7 +86,7 @@ export default function SettingsPage() {
                   <Label className="text-slate-300">Gym Name</Label>
                   <Input
                     value={gymName}
-                    onChange={(e) => setGymName(e.target.value)}
+                    onChange={(e: any) => setGymName(e.currentTarget.value || '')}
                     className="border-slate-800 bg-slate-950 text-white focus-visible:ring-cyan-500"
                   />
                 </div>
@@ -94,7 +94,7 @@ export default function SettingsPage() {
                   <Label className="text-slate-300">Address</Label>
                   <Textarea
                     value={gymAddress}
-                    onChange={(e) => setGymAddress(e.target.value)}
+                    onChange={(e : any) => setGymAddress(e.currentTarget.value)}
                     className="border-slate-800 bg-slate-950 text-white focus-visible:ring-cyan-500 min-h-[80px]"
                   />
                 </div>
@@ -103,7 +103,7 @@ export default function SettingsPage() {
                     <Label className="text-slate-300">Phone</Label>
                     <Input
                       value={gymPhone}
-                      onChange={(e) => setGymPhone(e.target.value)}
+                      onChange={(e: any) => setGymPhone(e.currentTarget.value)}
                       className="border-slate-800 bg-slate-950 text-white focus-visible:ring-cyan-500"
                     />
                   </div>
@@ -111,7 +111,7 @@ export default function SettingsPage() {
                     <Label className="text-slate-300">Email</Label>
                     <Input
                       value={gymEmail}
-                      onChange={(e) => setGymEmail(e.target.value)}
+                      onChange={(e: any) => setGymEmail(e.currentTarget.value)}
                       className="border-slate-800 bg-slate-950 text-white focus-visible:ring-cyan-500"
                     />
                   </div>

@@ -36,7 +36,7 @@ export function Sidebar() {
       <div className="flex h-16 items-center px-6">
         <Link href="/dashboard" className="flex items-center gap-2">
           <Dumbbell className="h-6 w-6 text-cyan-500" />
-          <span className="text-lg font-bold text-white tracking-tight">IronPulse</span>
+          <span className="text-lg font-bold text-white tracking-tight">Sunain</span>
         </Link>
       </div>
 
