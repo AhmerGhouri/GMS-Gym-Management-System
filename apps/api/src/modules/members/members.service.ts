@@ -10,11 +10,16 @@ import { PaginatedResult } from '../../common/dto/pagination.dto';
 import { generateMemberId } from '@gms/utils';
 import { Prisma } from '@prisma/client';
 
+import { MembershipsService } from '../memberships/memberships.service';
+
 @Injectable()
 export class MembersService {
   private readonly logger = new Logger(MembersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly membershipsService: MembershipsService,
+  ) {}
 
   async create(dto: CreateMemberDto) {
     if (dto.cnic) {
@@ -30,13 +35,23 @@ export class MembersService {
     const count = await this.prisma.member.count();
     const memberId = generateMemberId(count + 1);
 
+    const { planId, joiningDate, ...memberData } = dto;
+
     const member = await this.prisma.member.create({
       data: {
-        ...dto,
+        ...memberData,
         memberId,
-        dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+        joiningDate: joiningDate ? new Date(joiningDate) : new Date(),
       },
     });
+
+    if (planId) {
+      await this.membershipsService.assignPlan(
+        member.id,
+        planId,
+        joiningDate ? new Date(joiningDate) : new Date(),
+      );
+    }
 
     this.logger.log(`Created new member: ${member.memberId}`);
     return member;
@@ -133,6 +148,9 @@ export class MembersService {
     const updateData: any = { ...dto };
     if (dto.dateOfBirth) {
       updateData.dateOfBirth = new Date(dto.dateOfBirth);
+    }
+    if (dto.joiningDate) {
+      updateData.joiningDate = new Date(dto.joiningDate);
     }
 
     const updatedMember = await this.prisma.member.update({

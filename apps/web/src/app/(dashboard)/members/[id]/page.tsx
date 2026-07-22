@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Edit2, Mail, Phone, MapPin, Calendar, CreditCard, Shield } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Edit2, Mail, Phone, MapPin, Calendar, CreditCard, Shield, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Table,
   TableBody,
@@ -18,18 +22,104 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { mockMembers, mockMemberships, mockAttendanceLogs, mockPayments } from '@/lib/mock-data';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { toast } from '@/components/ui/use-toast';
+import { api } from '@/lib/api/axios';
 import { formatDate, formatDateTime, formatCurrency, formatPhone, formatDuration } from '@gms/utils';
 import { MemberStatus, MembershipStatus, PaymentStatus } from '@gms/types';
 
 export default function MemberDetailPage() {
   const params = useParams();
   const memberId = params.id as string;
+  const queryClient = useQueryClient();
 
-  const member = mockMembers.find((m) => m.id === memberId) || mockMembers[0];
-  const memberships = mockMemberships.filter((m) => m.memberId === member.id);
-  const attendance = mockAttendanceLogs.filter((a) => a.memberId === member.id);
-  const payments = mockPayments.filter((p) => p.memberId === member.id);
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState('');
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isAssigning, setIsAssigning] = useState(false);
+
+  const { data: memberData, isLoading: isLoadingMember } = useQuery({
+    queryKey: ['member', memberId],
+    queryFn: async () => {
+      const res = await api.get(`/members/${memberId}`);
+      return res.data;
+    },
+  });
+
+  const member = memberData?.data;
+  const memberships = member?.memberships || [];
+
+  const { data: plansData } = useQuery({
+    queryKey: ['membership-plans'],
+    queryFn: async () => {
+      const res = await api.get('/memberships/plans');
+      return res.data;
+    },
+  });
+  const plans = plansData?.data || [];
+
+  const { data: attendanceData } = useQuery({
+    queryKey: ['attendance'],
+    queryFn: async () => {
+      const res = await api.get('/attendance');
+      return res.data;
+    },
+  });
+  const attendance = (attendanceData?.data || []).filter((a: any) => a.memberId === memberId);
+
+  const { data: paymentsData } = useQuery({
+    queryKey: ['payments'],
+    queryFn: async () => {
+      const res = await api.get('/payments');
+      return res.data;
+    },
+  });
+  const payments = (paymentsData?.data || []).filter((p: any) => p.memberId === memberId);
+
+  const handleAssignPlan = async () => {
+    if (!selectedPlanId) {
+      toast({ title: 'Error', description: 'Please select a plan.', variant: 'destructive' });
+      return;
+    }
+    setIsAssigning(true);
+    try {
+      await api.post('/memberships', {
+        memberId,
+        planId: selectedPlanId,
+        startDate: startDate || undefined,
+      });
+      toast({
+        title: 'Plan Assigned',
+        description: 'Membership plan has been assigned successfully.',
+        variant: 'success',
+      });
+      queryClient.invalidateQueries({ queryKey: ['member', memberId] });
+      queryClient.invalidateQueries({ queryKey: ['memberships'] });
+      setShowAssignDialog(false);
+      setSelectedPlanId('');
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.response?.data?.message || 'Failed to assign plan.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsAssigning(false);
+    }
+  };
 
   const getStatusBadge = (status: MemberStatus) => {
     switch (status) {
@@ -62,6 +152,14 @@ export default function MemberDetailPage() {
     }
   };
 
+  if (isLoadingMember) {
+    return <div className="text-white">Loading member details...</div>;
+  }
+
+  if (!member) {
+    return <div className="text-white">Member not found.</div>;
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -89,9 +187,11 @@ export default function MemberDetailPage() {
             </div>
           </div>
         </div>
-        <Button className="bg-cyan-600 text-white hover:bg-cyan-500">
-          <Edit2 className="mr-2 h-4 w-4" /> Edit Member
-        </Button>
+        <Link href={`/members/${memberId}/edit`}>
+          <Button className="bg-cyan-600 text-white hover:bg-cyan-500">
+            <Edit2 className="mr-2 h-4 w-4" /> Edit Member
+          </Button>
+        </Link>
       </div>
 
       <Tabs defaultValue="profile" className="space-y-6">
@@ -167,7 +267,11 @@ export default function MemberDetailPage() {
           <Card className="border-slate-800 bg-slate-900/50">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-white">Membership History</CardTitle>
-              <Button className="bg-cyan-600 text-white hover:bg-cyan-500" size="sm">
+              <Button
+                className="bg-cyan-600 text-white hover:bg-cyan-500"
+                size="sm"
+                onClick={() => setShowAssignDialog(true)}
+              >
                 <CreditCard className="mr-2 h-4 w-4" /> Assign Plan
               </Button>
             </CardHeader>
@@ -185,7 +289,7 @@ export default function MemberDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {memberships.map((ms) => (
+                    {memberships.map((ms: any) => (
                       <TableRow key={ms.id}>
                         <TableCell className="text-white font-medium">{ms.plan?.name || 'N/A'}</TableCell>
                         <TableCell className="text-slate-300">{formatDate(ms.startDate)}</TableCell>
@@ -221,7 +325,7 @@ export default function MemberDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {attendance.map((log) => (
+                    {attendance.map((log: any) => (
                       <TableRow key={log.id}>
                         <TableCell className="text-white">{formatDate(log.checkIn)}</TableCell>
                         <TableCell className="text-slate-300">
@@ -270,7 +374,7 @@ export default function MemberDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {payments.map((payment) => (
+                    {payments.map((payment: any) => (
                       <TableRow key={payment.id}>
                         <TableCell className="text-white font-mono text-xs">{payment.invoiceNumber}</TableCell>
                         <TableCell className="text-slate-300">{formatCurrency(payment.totalAmount)}</TableCell>
@@ -290,6 +394,71 @@ export default function MemberDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Assign Plan Dialog */}
+      <Dialog open={showAssignDialog} onOpenChange={(open) => {
+        setShowAssignDialog(open);
+        if (!open) {
+          setSelectedPlanId('');
+          setStartDate(new Date().toISOString().split('T')[0]);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Membership Plan</DialogTitle>
+            <DialogDescription>
+              Select a plan to assign to {member.firstName} {member.lastName}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label>Membership Plan *</Label>
+              <Select onValueChange={setSelectedPlanId} value={selectedPlanId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {plans.map((plan: any) => (
+                    <SelectItem key={plan.id} value={plan.id}>
+                      {plan.name} — {formatCurrency(plan.price)} / {plan.durationDays} days
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Start Date</Label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button type="button" variant="outline" onClick={() => setShowAssignDialog(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleAssignPlan}
+                disabled={isAssigning || !selectedPlanId}
+                className="bg-cyan-600 hover:bg-cyan-500"
+              >
+                {isAssigning ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Assigning...
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Assign Plan
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

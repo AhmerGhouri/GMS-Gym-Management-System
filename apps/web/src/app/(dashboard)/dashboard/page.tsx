@@ -1,13 +1,8 @@
 'use client';
 
 import { useAuthStore } from '@/lib/stores/auth.store';
-import {
-  mockDashboardStats,
-  mockRevenueData,
-  mockAttendanceData,
-  mockMembershipDistribution,
-  mockRecentActivity,
-} from '@/lib/mock-data';
+import { api } from '@/lib/api/axios';
+import { useQuery } from '@tanstack/react-query';
 import { formatCurrency } from '@gms/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -39,71 +34,10 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts';
-
-const stats = mockDashboardStats;
-
-const statCards = [
-  {
-    title: 'Total Members',
-    value: stats.totalMembers.toString(),
-    icon: Users,
-    change: '+12',
-    trend: 'up' as const,
-    color: 'text-cyan-500',
-    bg: 'bg-cyan-500/10',
-  },
-  {
-    title: 'Active Members',
-    value: stats.activeMembers.toString(),
-    icon: UserCheck,
-    change: '+8',
-    trend: 'up' as const,
-    color: 'text-emerald-500',
-    bg: 'bg-emerald-500/10',
-  },
-  {
-    title: 'Expired',
-    value: stats.expiredMembers.toString(),
-    icon: UserX,
-    change: '-3',
-    trend: 'down' as const,
-    color: 'text-amber-500',
-    bg: 'bg-amber-500/10',
-  },
-  {
-    title: "Today's Attendance",
-    value: stats.todayAttendance.toString(),
-    icon: CalendarDays,
-    change: '+5',
-    trend: 'up' as const,
-    color: 'text-violet-500',
-    bg: 'bg-violet-500/10',
-  },
-  {
-    title: 'Monthly Revenue',
-    value: formatCurrency(stats.monthlyRevenue),
-    icon: DollarSign,
-    change: '+18%',
-    trend: 'up' as const,
-    color: 'text-emerald-500',
-    bg: 'bg-emerald-500/10',
-  },
-  {
-    title: 'Outstanding Dues',
-    value: formatCurrency(stats.outstandingDues),
-    icon: TrendingUp,
-    change: '-5%',
-    trend: 'down' as const,
-    color: 'text-rose-500',
-    bg: 'bg-rose-500/10',
-  },
-];
-
 const COLORS = ['#0ea5e9', '#8b5cf6', '#f59e0b', '#10b981'];
 
-const activityIcons = {
+const activityIcons: Record<string, any> = {
   check_in: LogIn,
   check_out: LogOut,
   payment: CreditCard,
@@ -111,7 +45,7 @@ const activityIcons = {
   access_denied: ShieldAlert,
 };
 
-const activityColors = {
+const activityColors: Record<string, string> = {
   check_in: 'text-emerald-400',
   check_out: 'text-blue-400',
   payment: 'text-cyan-400',
@@ -121,6 +55,98 @@ const activityColors = {
 
 export default function DashboardPage() {
   const user = useAuthStore((state) => state.user);
+
+  const { data: statsData, isLoading: isStatsLoading } = useQuery({
+    queryKey: ['dashboard', 'stats'],
+    queryFn: async () => {
+      const res = await api.get('/dashboard/stats');
+      return res.data;
+    },
+  });
+
+  const { data: recentActivityData, isLoading: isActivityLoading } = useQuery({
+    queryKey: ['dashboard', 'recent-activity'],
+    queryFn: async () => {
+      const res = await api.get('/dashboard/recent-activity');
+      return res.data;
+    },
+  });
+
+  const recentActivity = recentActivityData?.data || [];
+
+  const stats = statsData?.data || {
+    totalMembers: 0,
+    activeMembers: 0,
+    expiredMembers: 0,
+    todayAttendance: 0,
+    todayRevenue: 0,
+    monthlyRevenue: 0,
+    outstandingDues: 0,
+    revenueTrend: [],
+    membershipDistribution: [],
+    attendancePattern: [],
+  };
+
+  const statCards = [
+    {
+      title: 'Total Members',
+      value: stats.totalMembers?.toString(),
+      icon: Users,
+      change: '+12',
+      trend: 'up' as const,
+      color: 'text-cyan-500',
+      bg: 'bg-cyan-500/10',
+    },
+    {
+      title: 'Active Members',
+      value: stats.activeMembers?.toString(),
+      icon: UserCheck,
+      change: '+8',
+      trend: 'up' as const,
+      color: 'text-emerald-500',
+      bg: 'bg-emerald-500/10',
+    },
+    {
+      title: 'Expired',
+      value: stats.expiredMembers?.toString(),
+      icon: UserX,
+      change: '-3',
+      trend: 'down' as const,
+      color: 'text-amber-500',
+      bg: 'bg-amber-500/10',
+    },
+    {
+      title: "Today's Attendance",
+      value: stats.todayAttendance?.toString(),
+      icon: CalendarDays,
+      change: '+5',
+      trend: 'up' as const,
+      color: 'text-violet-500',
+      bg: 'bg-violet-500/10',
+    },
+    {
+      title: 'Monthly Revenue',
+      value: formatCurrency(stats.monthlyRevenue || 0),
+      icon: DollarSign,
+      change: '+18%',
+      trend: 'up' as const,
+      color: 'text-emerald-500',
+      bg: 'bg-emerald-500/10',
+    },
+    {
+      title: 'Outstanding Dues',
+      value: formatCurrency(stats.outstandingDues || 0),
+      icon: TrendingUp,
+      change: '-5%',
+      trend: 'down' as const,
+      color: 'text-rose-500',
+      bg: 'bg-rose-500/10',
+    },
+  ];
+
+  if (isStatsLoading) {
+    return <div className="text-white">Loading dashboard...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -141,9 +167,8 @@ export default function DashboardPage() {
                 <div className={`rounded-lg p-2 ${stat.bg}`}>
                   <stat.icon className={`h-4 w-4 ${stat.color}`} />
                 </div>
-                <div className={`flex items-center text-xs font-medium ${
-                  stat.trend === 'up' ? 'text-emerald-400' : 'text-rose-400'
-                }`}>
+                <div className={`flex items-center text-xs font-medium ${stat.trend === 'up' ? 'text-emerald-400' : 'text-rose-400'
+                  }`}>
                   {stat.change}
                   {stat.trend === 'up' ? (
                     <ArrowUpRight className="ml-0.5 h-3 w-3" />
@@ -171,7 +196,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={mockRevenueData}>
+                <AreaChart data={stats.revenueTrend || []}>
                   <defs>
                     <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.3} />
@@ -220,7 +245,7 @@ export default function DashboardPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={mockMembershipDistribution}
+                    data={stats.membershipDistribution || []}
                     cx="50%"
                     cy="50%"
                     innerRadius={50}
@@ -229,7 +254,7 @@ export default function DashboardPage() {
                     dataKey="count"
                     nameKey="plan"
                   >
-                    {mockMembershipDistribution.map((_, index) => (
+                    {(stats.membershipDistribution || []).map((_: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -245,11 +270,11 @@ export default function DashboardPage() {
               </ResponsiveContainer>
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2">
-              {mockMembershipDistribution.map((item, index) => (
+              {(stats.membershipDistribution || []).map((item: any, index: number) => (
                 <div key={item.plan} className="flex items-center gap-2 text-xs">
                   <div
                     className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: COLORS[index] }}
+                    style={{ backgroundColor: COLORS[index % COLORS.length] }}
                   />
                   <span className="text-slate-400">{item.plan}</span>
                   <span className="ml-auto font-medium text-white">{item.percentage}%</span>
@@ -270,7 +295,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="h-[240px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={mockAttendanceData}>
+                <BarChart data={stats.attendancePattern || []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="date" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
@@ -299,8 +324,8 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {mockRecentActivity.slice(0, 6).map((activity) => {
-                const Icon = activityIcons[activity.type];
+              {recentActivity.map((activity: any) => {
+                const Icon = activityIcons[activity.type] || Activity;
                 const color = activityColors[activity.type];
                 return (
                   <div key={activity.id} className="flex items-start gap-3">

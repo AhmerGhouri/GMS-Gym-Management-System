@@ -25,7 +25,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { mockRevenueData, mockAttendanceData, mockDashboardStats, mockMembershipDistribution } from '@/lib/mock-data';
+import { useQuery } from '@tanstack/react-query';
 import { formatCurrency } from '@gms/utils';
 
 const memberGrowthData = [
@@ -49,7 +49,28 @@ const retentionData = [
 ];
 
 export default function ReportsPage() {
-  const stats = mockDashboardStats;
+  const { data: statsData, isLoading } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: async () => {
+      const res = await api.get('/dashboard/stats');
+      return res.data;
+    },
+  });
+
+  const stats = statsData?.data || {
+    monthlyRevenue: 0,
+    activeMembers: 0,
+    todayAttendance: 0,
+    outstandingDues: 0,
+    revenueTrend: [],
+    memberGrowth: [],
+    attendancePattern: [],
+    membershipDistribution: [],
+  };
+
+  if (isLoading) {
+    return <div className="text-white">Loading reports...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -73,7 +94,7 @@ export default function ReportsPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
           title="Total Revenue"
-          value={formatCurrency(stats.monthlyRevenue)}
+          value={formatCurrency(stats?.monthlyRevenue || 0)}
           change="+18%"
           trend="up"
           icon={DollarSign}
@@ -82,7 +103,7 @@ export default function ReportsPage() {
         />
         <SummaryCard
           title="Active Members"
-          value={stats.activeMembers.toString()}
+          value={(stats?.activeMembers || 0).toString()}
           change="+3.2%"
           trend="up"
           icon={Users}
@@ -90,8 +111,8 @@ export default function ReportsPage() {
           bg="bg-cyan-500/10"
         />
         <SummaryCard
-          title="Avg. Daily Attendance"
-          value="67"
+          title="Today's Attendance"
+          value={(stats?.todayAttendance || 0).toString()}
           change="+12%"
           trend="up"
           icon={CalendarDays}
@@ -99,8 +120,8 @@ export default function ReportsPage() {
           bg="bg-violet-500/10"
         />
         <SummaryCard
-          title="Retention Rate"
-          value="90%"
+          title="Outstanding Dues"
+          value={formatCurrency(stats?.outstandingDues || 0)}
           change="-2%"
           trend="down"
           icon={TrendingUp}
@@ -119,7 +140,7 @@ export default function ReportsPage() {
           <CardContent>
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={mockRevenueData}>
+                <AreaChart data={stats.revenueTrend || []}>
                   <defs>
                     <linearGradient id="reportRevGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
@@ -148,7 +169,7 @@ export default function ReportsPage() {
           <CardContent>
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={memberGrowthData}>
+                <LineChart data={stats.memberGrowth || []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="month" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
@@ -170,7 +191,7 @@ export default function ReportsPage() {
           <CardContent>
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={mockAttendanceData}>
+                <BarChart data={stats.attendancePattern || []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="date" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
@@ -213,7 +234,7 @@ export default function ReportsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-4">
-            {mockMembershipDistribution.map((item) => (
+            {(stats.membershipDistribution || []).map((item: any) => (
               <div key={item.plan} className="rounded-lg bg-slate-800/50 p-4">
                 <div className="text-sm text-slate-400">{item.plan}</div>
                 <div className="mt-1 text-2xl font-bold text-white">{item.count}</div>

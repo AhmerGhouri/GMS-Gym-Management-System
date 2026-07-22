@@ -3,7 +3,22 @@
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
   "compilerOptions": {
+    "webpack": true,
     "deleteOutDir": true,
-    "plugins": ["@nestjs/swagger"]
+    "plugins": [
+      "@nestjs/swagger"
+    ],
+    "assets": [],
+    "manualRestart": false,
+    "builder": {
+      "type": "webpack",
+      "options": {
+        "externals": {
+          "exclude": [
+            "@gms/utils"
+          ]
+        }
+      }
+    }
   }
 }

@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, Clock, Search, Users, ArrowUpRight } from 'lucide-react';
+import { api } from '@/lib/api/axios';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,28 +17,41 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { mockAttendanceLogs } from '@/lib/mock-data';
 import { formatDate, formatDuration } from '@gms/utils';
 
 export default function AttendancePage() {
   const [search, setSearch] = useState('');
 
-  const filteredLogs = mockAttendanceLogs.filter((log) => {
+  const { data: attendanceData, isLoading } = useQuery({
+    queryKey: ['attendance'],
+    queryFn: async () => {
+      const res = await api.get('/attendance');
+      return res.data;
+    },
+  });
+
+  const attendanceLogs = attendanceData?.data || [];
+
+  const filteredLogs = attendanceLogs.filter((log: any) => {
     if (!search) return true;
     const memberName = `${log.member?.firstName} ${log.member?.lastName}`.toLowerCase();
     return memberName.includes(search.toLowerCase());
   });
 
   // Today's stats
-  const todayLogs = mockAttendanceLogs.filter((log) => {
+  const todayLogs = attendanceLogs.filter((log: any) => {
     const today = new Date().toDateString();
     return new Date(log.checkIn).toDateString() === today;
   });
 
-  const totalCheckedIn = mockAttendanceLogs.length;
-  const avgDuration = Math.round(
-    mockAttendanceLogs.reduce((sum, log) => sum + (log.duration || 0), 0) / mockAttendanceLogs.length
-  );
+  const totalCheckedIn = attendanceLogs.length;
+  const avgDuration = attendanceLogs.length > 0 
+    ? Math.round(attendanceLogs.reduce((sum: number, log: any) => sum + (log.duration || 0), 0) / attendanceLogs.length)
+    : 0;
+
+  if (isLoading) {
+    return <div className="text-white">Loading attendance...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -77,7 +92,7 @@ export default function AttendancePage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-white">
-                {mockAttendanceLogs.filter((l) => l.checkOut).length}
+                {attendanceLogs.filter((l: any) => l.checkOut).length}
               </p>
               <p className="text-xs text-slate-400">Checked Out</p>
             </div>
@@ -93,7 +108,7 @@ export default function AttendancePage() {
             <Input
               placeholder="Search by member name..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e : any) => setSearch(e.target.value)}
               className="pl-9 border-slate-800 bg-slate-950 text-white placeholder:text-slate-500"
             />
           </div>
@@ -118,7 +133,7 @@ export default function AttendancePage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredLogs.map((log) => (
+              filteredLogs.map((log : any) => (
                 <TableRow key={log.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">

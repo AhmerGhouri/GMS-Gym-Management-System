@@ -31,14 +31,24 @@ export class CreateMemberDto {
   @MaxLength(100)
   fatherName?: string;
 
-  @ApiProperty({ enum: Gender, example: Gender.MALE })
-  @IsEnum(Gender)
-  gender: Gender;
-
   @ApiPropertyOptional({ example: '1995-06-15' })
   @IsOptional()
   @IsDateString()
   dateOfBirth?: string;
+
+  @ApiProperty({ enum: Gender, example: Gender.MALE })
+  @IsEnum(Gender)
+  gender: Gender;
+
+  @ApiPropertyOptional({ example: '2023-01-01' })
+  @IsOptional()
+  @IsDateString()
+  joiningDate?: string;
+
+  @ApiPropertyOptional({ example: 'plan_id_123' })
+  @IsOptional()
+  @IsString()
+  planId?: string;
 
   @ApiProperty({ example: '03001234567' })
   @IsString()

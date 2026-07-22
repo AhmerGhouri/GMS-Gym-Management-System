@@ -9,6 +9,7 @@
     "paths": {
       "@/*": ["./src/*"]
     },
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "noEmit": true,
     "incremental": true
   }

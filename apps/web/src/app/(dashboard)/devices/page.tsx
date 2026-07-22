@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api/axios';
 import {
   Plus,
   Wifi,
@@ -41,15 +43,33 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { mockDevices, mockAccessLogs } from '@/lib/mock-data';
 import { formatDateTime } from '@gms/utils';
 import { AccessResult, DeviceConnectionType } from '@gms/types';
 
 export default function DevicesPage() {
   const [showAddDevice, setShowAddDevice] = useState(false);
 
-  const onlineCount = mockDevices.filter((d) => d.status === 'ONLINE').length;
-  const offlineCount = mockDevices.filter((d) => d.status === 'OFFLINE').length;
+  const { data: devicesData, isLoading: isLoadingDevices } = useQuery({
+    queryKey: ['devices'],
+    queryFn: async () => {
+      const res = await api.get('/devices');
+      return res.data;
+    },
+  });
+
+  const { data: logsData, isLoading: isLoadingLogs } = useQuery({
+    queryKey: ['access-logs'],
+    queryFn: async () => {
+      const res = await api.get('/devices/access-logs');
+      return res.data;
+    },
+  });
+
+  const devices = devicesData?.data || [];
+  const accessLogs = logsData?.data || [];
+
+  const onlineCount = devices.filter((d: any) => d.status === 'ONLINE').length;
+  const offlineCount = devices.filter((d: any) => d.status === 'OFFLINE').length;
 
   return (
     <div className="space-y-6">
@@ -79,7 +99,9 @@ export default function DevicesPage() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {mockDevices.map((device) => (
+          {isLoadingDevices ? (
+            <div className="text-slate-400 p-4">Loading devices...</div>
+          ) : devices.map((device: any) => (
             <Card
               key={device.id}
               className={`border-slate-800 bg-slate-900/50 transition-colors ${
@@ -164,7 +186,13 @@ export default function DevicesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockAccessLogs.map((log) => (
+              {isLoadingLogs ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center text-slate-500">
+                    Loading access logs...
+                  </TableCell>
+                </TableRow>
+              ) : accessLogs.map((log: any) => (
                 <TableRow key={log.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">

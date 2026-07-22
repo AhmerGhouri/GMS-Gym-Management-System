@@ -41,29 +41,23 @@ export default function LoginPage() {
     setIsLoading(true);
     setError(null);
     try {
-      // MOCK LOGIN IMPLEMENTATION
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const res = await api.post('/auth/login', data);
+      const authData = res.data?.data;
 
-      if (data.email === 'admin@gms.local' && data.password === 'password') {
-        setAuth(
-          {
-            id: '1',
-            email: 'admin@gms.local',
-            firstName: 'Admin',
-            lastName: 'User',
-            role: 'SUPER_ADMIN' as any,
-            isActive: true,
-            lastLoginAt: new Date().toISOString(),
-          },
-          'mock-access-token',
-          'mock-refresh-token'
-        );
-        router.push('/dashboard');
-      } else {
-        throw new Error('Invalid email or password (use admin@gms.local / password)');
+      if (!authData || !authData.accessToken) {
+        throw new Error('Invalid response from server');
       }
+
+      setAuth(
+        authData.user,
+        authData.accessToken,
+        authData.refreshToken
+      );
+      router.push('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Failed to login. Please try again.');
+      const message = err?.response?.data?.message || err?.message || 'Failed to login. Please try again.';
+      const isNetworkError = !err?.response && err?.message === 'Network Error';
+      setError(isNetworkError ? 'Unable to connect to server. Please check your connection.' : message);
     } finally {
       setIsLoading(false);
     }
@@ -116,7 +110,7 @@ export default function LoginPage() {
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="Admin@123"
                 className="border-slate-800 bg-slate-950 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500"
                 {...register('password')}
               />

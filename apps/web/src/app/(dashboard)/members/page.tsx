@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { Plus, Search, MoreHorizontal, FileDown } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, FileDown, Eye, Trash2, ShieldAlert } from 'lucide-react';
 import { api } from '@/lib/api/axios';
 import { Member, ApiResponse, PaginatedResult, MemberStatus } from '@gms/types';
 
@@ -18,9 +18,18 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { toast } from '@/components/ui/use-toast';
 import { formatDate } from '@gms/utils';
 
 export default function MembersPage() {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
@@ -34,7 +43,9 @@ export default function MembersPage() {
     },
   });
 
-  const members = data?.data?.items || [];
+  // The API response interceptor maps paginated results to:
+  // { success: true, data: T[], meta: PaginationMeta }
+  const members = Array.isArray(data?.data) ? data.data : [];
   const meta = data?.meta;
 
   const getStatusBadge = (status: MemberStatus) => {
@@ -73,7 +84,7 @@ export default function MembersPage() {
             <Input
               placeholder="Search by name, ID, phone..."
               value={search}
-              onChange={(e) => {
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 setSearch(e.target.value);
                 setPage(1);
               }}
@@ -132,9 +143,39 @@ export default function MembersPage() {
                     {getStatusBadge(member.status)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48 bg-slate-900 border-slate-800 text-slate-300">
+                        <DropdownMenuItem asChild className="hover:bg-slate-800 hover:text-white cursor-pointer">
+                          <Link href={`/members/${member.id}`}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Details
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator className="bg-slate-800" />
+                        <DropdownMenuItem 
+                          className="hover:bg-slate-800 hover:text-white cursor-pointer text-destructive"
+                          onClick={async () => {
+                            if (confirm('Are you sure you want to delete this member?')) {
+                              try {
+                                await api.delete(`/members/${member.id}`);
+                                toast({ title: 'Deleted', description: 'Member deleted.', variant: 'success' });
+                                queryClient.invalidateQueries({ queryKey: ['members'] });
+                              } catch (err: any) {
+                                toast({ title: 'Error', description: err.response?.data?.message || 'Failed to delete member.', variant: 'destructive' });
+                              }
+                            }
+                          }}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete Member
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))
