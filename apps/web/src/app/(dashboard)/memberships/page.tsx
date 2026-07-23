@@ -61,9 +61,11 @@ const durationColors: Record<string, string> = {
 
 const planSchema = z.object({
   name: z.string().min(2, 'Plan name is required'),
+  gender: z.enum(['MALE', 'FEMALE', 'UNISEX']),
   duration: z.nativeEnum(PlanDuration),
   durationDays: z.coerce.number().min(1, 'Duration must be at least 1 day'),
   price: z.coerce.number().min(0, 'Price cannot be negative'),
+  admissionFee: z.coerce.number().min(0, 'Admission fee cannot be negative'),
   description: z.string().optional(),
 });
 
@@ -78,8 +80,10 @@ export default function MembershipsPage() {
     resolver: zodResolver(planSchema),
     defaultValues: {
       duration: PlanDuration.MONTHLY,
+      gender: 'UNISEX',
       durationDays: 30,
       price: 0,
+      admissionFee: 0,
     }
   });
 
@@ -88,9 +92,11 @@ export default function MembershipsPage() {
     if (editingPlan) {
       reset({
         name: editingPlan.name,
+        gender: editingPlan.gender || 'UNISEX',
         duration: editingPlan.duration,
         durationDays: editingPlan.durationDays,
         price: Number(editingPlan.price),
+        admissionFee: Number(editingPlan.admissionFee || 0),
         description: editingPlan.description || '',
       });
     }
@@ -132,8 +138,10 @@ export default function MembershipsPage() {
     setEditingPlan(null);
     reset({
       duration: PlanDuration.MONTHLY,
+      gender: 'UNISEX',
       durationDays: 30,
       price: 0,
+      admissionFee: 0,
       name: '',
       description: '',
     });
@@ -148,8 +156,10 @@ export default function MembershipsPage() {
     setEditingPlan(null);
     reset({
       duration: PlanDuration.MONTHLY,
+      gender: 'UNISEX',
       durationDays: 30,
       price: 0,
+      admissionFee: 0,
       name: '',
       description: '',
     });
@@ -272,6 +282,7 @@ export default function MembershipsPage() {
                     <span className="text-3xl font-bold text-white">{formatCurrency(plan.price)}</span>
                     <span className="text-sm text-slate-500">/ {plan.durationDays} days</span>
                   </div>
+                  <p className="mt-2 text-xs text-slate-400">For: {plan.gender === 'UNISEX' ? 'Unisex' : plan.gender === 'MALE' ? 'Male' : 'Female'}</p>
                   <div className="mt-4 flex items-center gap-4 text-xs text-slate-400">
                     <div className="flex items-center gap-1">
                       <Clock className="h-3.5 w-3.5" />
@@ -394,6 +405,17 @@ export default function MembershipsPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
+                <Label>Category *</Label>
+                <Select defaultValue={editingPlan?.gender || 'UNISEX'} onValueChange={(val) => setValue('gender', val as PlanFormValues['gender'])}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UNISEX">Unisex</SelectItem>
+                    <SelectItem value="MALE">Male</SelectItem>
+                    <SelectItem value="FEMALE">Female</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label>Duration Type *</Label>
                 <Select
                   defaultValue={editingPlan?.duration || PlanDuration.MONTHLY}
@@ -417,6 +439,12 @@ export default function MembershipsPage() {
               <Label>Price (Rs.) *</Label>
               <Input type="number" min="0" {...register('price')} />
               {errors.price && <p className="text-xs text-destructive">{errors.price.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label>Admission Fee (Rs.)</Label>
+              <Input type="number" min="0" {...register('admissionFee')} />
+              <p className="text-xs text-slate-500">Applied only when selected while assigning this plan.</p>
+              {errors.admissionFee && <p className="text-xs text-destructive">{errors.admissionFee.message}</p>}
             </div>
             <div className="space-y-2">
               <Label>Description</Label>

@@ -1,6 +1,6 @@
 import { IsString, IsNotEmpty, IsNumber, IsOptional, IsEnum, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PlanDuration } from '@prisma/client';
+import { PlanDuration, PlanGender } from '@prisma/client';
 
 export class CreatePlanDto {
   @ApiProperty({ example: 'Basic Monthly' })
@@ -12,6 +12,11 @@ export class CreatePlanDto {
   @IsEnum(PlanDuration)
   duration: PlanDuration;
 
+  @ApiPropertyOptional({ enum: PlanGender, example: PlanGender.UNISEX })
+  @IsOptional()
+  @IsEnum(PlanGender)
+  gender?: PlanGender;
+
   @ApiProperty({ example: 30 })
   @IsNumber()
   @Min(1)
@@ -21,6 +26,12 @@ export class CreatePlanDto {
   @IsNumber()
   @Min(0)
   price: number;
+
+  @ApiPropertyOptional({ example: 1000 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  admissionFee?: number;
 
   @ApiPropertyOptional({ example: 'Access to gym equipment' })
   @IsOptional()

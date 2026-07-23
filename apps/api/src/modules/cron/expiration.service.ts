@@ -41,7 +41,7 @@ export class ExpirationService {
 
             // 2. Create a PENDING payment for the next billing cycle
             const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-            const planPrice = membership.plan?.price || 0;
+            const planPrice = membership.planPrice;
 
             await prisma.payment.create({
               data: {
@@ -135,7 +135,7 @@ export class ExpirationService {
 
         if (!existingMonthlyPayment) {
           const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-          const planPrice = membership.plan?.price || 0;
+          const planPrice = membership.planPrice;
 
           await this.prisma.payment.create({
             data: {

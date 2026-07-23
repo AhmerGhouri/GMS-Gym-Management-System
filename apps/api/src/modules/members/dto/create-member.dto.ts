@@ -8,6 +8,7 @@ import {
   MaxLength,
   MinLength,
   Matches,
+  IsBoolean,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Gender } from '@prisma/client';
@@ -49,6 +50,11 @@ export class CreateMemberDto {
   @IsOptional()
   @IsString()
   planId?: string;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  includeAdmissionFee?: boolean;
 
   @ApiProperty({ example: '03001234567' })
   @IsString()

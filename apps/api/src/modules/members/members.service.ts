@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
 import { CreateMemberDto, UpdateMemberDto, MemberFilterDto } from './dto';
@@ -35,7 +36,7 @@ export class MembersService {
     const count = await this.prisma.member.count();
     const memberId = generateMemberId(count + 1);
 
-    const { planId, joiningDate, ...memberData } = dto;
+    const { planId, joiningDate, includeAdmissionFee, ...memberData } = dto;
 
     const member = await this.prisma.member.create({
       data: {
@@ -50,6 +51,7 @@ export class MembersService {
         member.id,
         planId,
         joiningDate ? new Date(joiningDate) : new Date(),
+        includeAdmissionFee,
       );
     }
 
@@ -58,6 +60,7 @@ export class MembersService {
   }
 
   async findAll(filter: MemberFilterDto) {
+    await this.membershipsService.syncExpiredMemberships();
     const where: Prisma.MemberWhereInput = {};
 
     if (filter.status) {
@@ -89,7 +92,7 @@ export class MembersService {
           : { createdAt: 'desc' },
         include: {
           memberships: {
-            where: { status: 'ACTIVE' },
+            where: { status: 'ACTIVE', endDate: { gte: new Date() } },
             include: { plan: true },
             take: 1,
           },
@@ -115,11 +118,12 @@ export class MembersService {
   }
 
   async findOne(id: string) {
+    await this.membershipsService.syncExpiredMemberships();
     const member = await this.prisma.member.findUnique({
       where: { id },
       include: {
-        memberships: {
-          include: { plan: true },
+          memberships: {
+            include: { plan: true },
           orderBy: { createdAt: 'desc' },
         },
       },
@@ -135,6 +139,21 @@ export class MembersService {
   async update(id: string, dto: UpdateMemberDto) {
     // Check if member exists
     await this.findOne(id);
+
+    if (dto.status === 'ACTIVE') {
+      const unpaidPayments = await this.prisma.payment.count({
+        where: {
+          memberId: id,
+          paymentStatus: { in: ['PENDING', 'PARTIAL'] },
+          remainingDue: { gt: 0 },
+        },
+      });
+      if (unpaidPayments > 0) {
+        throw new BadRequestException(
+          'This member has unpaid dues and cannot be activated until the payment is marked paid.',
+        );
+      }
+    }
 
     if (dto.cnic) {
       const existingCnic = await this.prisma.member.findFirst({

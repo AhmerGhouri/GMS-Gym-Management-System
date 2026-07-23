@@ -50,6 +50,7 @@ export default function MemberDetailPage() {
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [isAssigning, setIsAssigning] = useState(false);
+  const [includeAdmissionFee, setIncludeAdmissionFee] = useState(false);
 
   const { data: memberData, isLoading: isLoadingMember } = useQuery({
     queryKey: ['member', memberId],
@@ -69,7 +70,7 @@ export default function MemberDetailPage() {
       return res.data;
     },
   });
-  const plans = plansData?.data || [];
+  const plans = (plansData?.data || []).filter((plan: any) => plan.isActive);
 
   const { data: attendanceData } = useQuery({
     queryKey: ['attendance'],
@@ -100,6 +101,7 @@ export default function MemberDetailPage() {
         memberId,
         planId: selectedPlanId,
         startDate: startDate || undefined,
+        includeAdmissionFee,
       });
       toast({
         title: 'Plan Assigned',
@@ -110,6 +112,7 @@ export default function MemberDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['memberships'] });
       setShowAssignDialog(false);
       setSelectedPlanId('');
+      setIncludeAdmissionFee(false);
     } catch (err: any) {
       toast({
         title: 'Error',
@@ -118,6 +121,19 @@ export default function MemberDetailPage() {
       });
     } finally {
       setIsAssigning(false);
+    }
+  };
+
+  const markPaymentPaid = async (paymentId: string) => {
+    try {
+      await api.patch(`/payments/${paymentId}`, { paymentStatus: 'PAID' });
+      toast({ title: 'Payment Updated', description: 'Payment has been marked as paid.', variant: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['member', memberId] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.response?.data?.message || 'Unable to update payment.', variant: 'destructive' });
     }
   };
 
@@ -286,6 +302,7 @@ export default function MemberDetailPage() {
                       <TableHead>Start Date</TableHead>
                       <TableHead>End Date</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Payment</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -295,6 +312,15 @@ export default function MemberDetailPage() {
                         <TableCell className="text-slate-300">{formatDate(ms.startDate)}</TableCell>
                         <TableCell className="text-slate-300">{formatDate(ms.endDate)}</TableCell>
                         <TableCell>{getMembershipStatusBadge(ms.status)}</TableCell>
+                        <TableCell>
+                          {ms.payments?.some((payment: any) => payment.paymentStatus === 'PAID') ? (
+                            <Badge variant="success">Paid</Badge>
+                          ) : ms.status === 'EXPIRED' ? (
+                            <Badge variant="destructive">Unpaid</Badge>
+                          ) : (
+                            <Badge variant="outline">Not due</Badge>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -371,6 +397,7 @@ export default function MemberDetailPage() {
                       <TableHead>Method</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -385,6 +412,13 @@ export default function MemberDetailPage() {
                         <TableCell className="text-slate-300">{payment.paymentMethod}</TableCell>
                         <TableCell>{getPaymentStatusBadge(payment.paymentStatus)}</TableCell>
                         <TableCell className="text-slate-300">{formatDate(payment.paidAt)}</TableCell>
+                        <TableCell className="text-right">
+                          {payment.paymentStatus !== 'PAID' && payment.paymentStatus !== 'REFUNDED' && (
+                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500" onClick={() => markPaymentPaid(payment.id)}>
+                              Mark Paid
+                            </Button>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -434,6 +468,15 @@ export default function MemberDetailPage() {
                 onChange={(e) => setStartDate(e.target.value)}
               />
             </div>
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={includeAdmissionFee}
+                onChange={(event) => setIncludeAdmissionFee(event.target.checked)}
+              />
+              Apply the plan&apos;s admission fee
+            </label>
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => setShowAssignDialog(false)}>
                 Cancel

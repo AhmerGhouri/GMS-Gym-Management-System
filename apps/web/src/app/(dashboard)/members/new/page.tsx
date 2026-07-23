@@ -33,6 +33,7 @@ const memberSchema = z.object({
   gender: z.nativeEnum(Gender),
   joiningDate: z.string().optional(),
   planId: z.string().optional(),
+  includeAdmissionFee: z.boolean().optional(),
   phone: z.string().min(10, 'Phone number must be at least 10 digits'),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
   cnic: z.string().optional(),
@@ -59,6 +60,7 @@ export default function NewMemberPage() {
     defaultValues: {
       gender: Gender.MALE,
       joiningDate: new Date().toISOString().split('T')[0],
+      includeAdmissionFee: false,
     },
   });
 
@@ -70,7 +72,7 @@ export default function NewMemberPage() {
     },
   });
 
-  const plans = plansData?.data || [];
+  const plans = (plansData?.data || []).filter((plan: any) => plan.isActive);
 
   const onSubmit = async (data: MemberFormValues) => {
     setIsLoading(true);
@@ -216,6 +218,10 @@ export default function NewMemberPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <label className="flex items-center gap-2 text-sm text-slate-300">
+                  <input type="checkbox" className="h-4 w-4" {...register('includeAdmissionFee')} />
+                  Apply the plan&apos;s admission fee
+                </label>
               </CardContent>
             </Card>
 

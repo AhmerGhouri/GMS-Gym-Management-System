@@ -1,6 +1,7 @@
 'use client';
 
 import { useAuthStore } from '@/lib/stores/auth.store';
+import Link from 'next/link';
 import { api } from '@/lib/api/axios';
 import { useQuery } from '@tanstack/react-query';
 import { formatCurrency } from '@gms/utils';
@@ -85,62 +86,70 @@ export default function DashboardPage() {
     revenueTrend: [],
     membershipDistribution: [],
     attendancePattern: [],
+    changes: {},
   };
+  const change = (value?: number) => `${(value || 0) >= 0 ? '+' : ''}${value || 0}%`;
 
   const statCards = [
     {
       title: 'Total Members',
       value: stats.totalMembers?.toString(),
       icon: Users,
-      change: '+12',
+      change: change(stats.changes?.totalMembers),
       trend: 'up' as const,
       color: 'text-cyan-500',
       bg: 'bg-cyan-500/10',
+      href: '/members',
     },
     {
       title: 'Active Members',
       value: stats.activeMembers?.toString(),
       icon: UserCheck,
-      change: '+8',
+      change: change(stats.changes?.activeMembers),
       trend: 'up' as const,
       color: 'text-emerald-500',
       bg: 'bg-emerald-500/10',
+      href: '/members?status=ACTIVE',
     },
     {
       title: 'Expired',
       value: stats.expiredMembers?.toString(),
       icon: UserX,
-      change: '-3',
-      trend: 'down' as const,
+      change: change(stats.changes?.expiredMembers),
+      trend: (stats.changes?.expiredMembers || 0) > 0 ? 'up' as const : 'down' as const,
       color: 'text-amber-500',
       bg: 'bg-amber-500/10',
+      href: '/members?status=INACTIVE',
     },
     {
       title: "Today's Attendance",
       value: stats.todayAttendance?.toString(),
       icon: CalendarDays,
-      change: '+5',
+      change: change(stats.changes?.todayAttendance),
       trend: 'up' as const,
       color: 'text-violet-500',
       bg: 'bg-violet-500/10',
+      href: '/attendance',
     },
     {
       title: 'Monthly Revenue',
       value: formatCurrency(stats.monthlyRevenue || 0),
       icon: DollarSign,
-      change: '+18%',
+      change: change(stats.changes?.monthlyRevenue),
       trend: 'up' as const,
       color: 'text-emerald-500',
       bg: 'bg-emerald-500/10',
+      href: '/monthly-revenue',
     },
     {
       title: 'Outstanding Dues',
       value: formatCurrency(stats.outstandingDues || 0),
       icon: TrendingUp,
-      change: '-5%',
-      trend: 'down' as const,
+      change: change(stats.changes?.outstandingDues),
+      trend: (stats.changes?.outstandingDues || 0) > 0 ? 'up' as const : 'down' as const,
       color: 'text-rose-500',
       bg: 'bg-rose-500/10',
+      href: '/outstanding-dues',
     },
   ];
 
@@ -156,12 +165,17 @@ export default function DashboardPage() {
         <p className="text-slate-400">
           Welcome back{user?.firstName ? `, ${user.firstName}` : ''}. Here is what is happening today.
         </p>
+        <div className="mt-2 flex gap-3 text-sm">
+          <Link href="/members?gender=MALE" className="text-cyan-400 hover:text-cyan-300">Male: {stats.maleMembers || 0}</Link>
+          <Link href="/members?gender=FEMALE" className="text-violet-400 hover:text-violet-300">Female: {stats.femaleMembers || 0}</Link>
+        </div>
       </div>
 
       {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {statCards.map((stat) => (
-          <Card key={stat.title} className="border-slate-800 bg-slate-900/50">
+          <Link key={stat.title} href={stat.href} className="block">
+          <Card className="border-slate-800 bg-slate-900/50 transition-colors hover:border-cyan-700">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div className={`rounded-lg p-2 ${stat.bg}`}>
@@ -183,6 +197,7 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
+          </Link>
         ))}
       </div>
 

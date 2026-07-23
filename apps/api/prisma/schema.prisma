@@ -52,6 +52,12 @@ enum PlanDuration {
   YEARLY
 }
 
+enum PlanGender {
+  MALE
+  FEMALE
+  UNISEX
+}
+
 enum PaymentMethod {
   CASH
   CARD
@@ -189,8 +195,10 @@ model MembershipPlan {
   id           String       @id @default(uuid())
   name         String
   duration     PlanDuration
+  gender       PlanGender   @default(UNISEX)
   durationDays Int          @map("duration_days")
   price        Decimal      @db.Decimal(10, 2)
+  admissionFee Decimal      @default(0) @map("admission_fee") @db.Decimal(10, 2)
   description  String?
   isActive     Boolean      @default(true) @map("is_active")
   createdAt    DateTime     @default(now()) @map("created_at")
@@ -206,6 +214,8 @@ model Membership {
   id             String           @id @default(uuid())
   memberId       String           @map("member_id")
   planId         String           @map("plan_id")
+  planPrice      Decimal          @map("plan_price") @db.Decimal(10, 2)
+  admissionFee   Decimal          @default(0) @map("admission_fee") @db.Decimal(10, 2)
   startDate      DateTime         @map("start_date")
   endDate        DateTime         @map("end_date")
   status         MembershipStatus @default(ACTIVE)
