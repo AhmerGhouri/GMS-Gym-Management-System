@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Edit2, Mail, Phone, MapPin, Calendar, CreditCard, Shield, Loader2 } from 'lucide-react';
+import { ArrowLeft, Edit2, Mail, Phone, MapPin, Calendar, CreditCard, Shield, Loader2, Clock } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,13 +73,13 @@ export default function MemberDetailPage() {
   const plans = (plansData?.data || []).filter((plan: any) => plan.isActive);
 
   const { data: attendanceData } = useQuery({
-    queryKey: ['attendance'],
+    queryKey: ['attendance', 'member', memberId],
     queryFn: async () => {
-      const res = await api.get('/attendance');
+      const res = await api.get(`/attendance/member/${memberId}?take=30`);
       return res.data;
     },
   });
-  const attendance = (attendanceData?.data || []).filter((a: any) => a.memberId === memberId);
+  const attendance = Array.isArray(attendanceData) ? attendanceData : (attendanceData?.data || []);
 
   const { data: paymentsData } = useQuery({
     queryKey: ['payments'],
@@ -89,6 +89,16 @@ export default function MemberDetailPage() {
     },
   });
   const payments = (paymentsData?.data || []).filter((p: any) => p.memberId === memberId);
+
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: async () => {
+      const res = await api.get('/settings');
+      return res.data;
+    },
+  });
+  const settingsArray = settingsData?.data || [];
+  const getSetting = (key: string) => settingsArray.find((s: any) => s.key === key)?.value || '';
 
   const handleAssignPlan = async () => {
     if (!selectedPlanId) {
@@ -139,10 +149,132 @@ export default function MemberDetailPage() {
   };
 
   const printInvoice = (payment: any) => {
+    const gymName = getSetting('GYM_NAME') || 'GMS Fitness';
+    const gymAddress = getSetting('GYM_ADDRESS') || '123 Fitness Street, Gym City';
+    const gymPhone = getSetting('GYM_PHONE') || '+1 234 567 890';
+    const gymEmail = getSetting('GYM_EMAIL') || 'contact@gmsfitness.com';
+
     const status = payment.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID';
     const popup = window.open('', '_blank');
     if (!popup) return;
-    popup.document.write(`<html><head><title>Invoice ${payment.invoiceNumber}</title><style>body{font-family:Arial;padding:40px;color:#0f172a}.header{display:flex;justify-content:space-between;border-bottom:2px solid #0891b2;padding-bottom:16px}.status{padding:7px 12px;border-radius:999px;color:#fff;background:${status === 'PAID' ? '#059669' : '#dc2626'}}table{width:100%;border-collapse:collapse;margin-top:30px}td{padding:12px;border-bottom:1px solid #ddd}.total{font-size:22px;font-weight:bold}</style></head><body><div class="header"><div><h1>Gym Management System</h1><p>Invoice ${payment.invoiceNumber}</p></div><span class="status">${status}</span></div><p><b>Member:</b> ${member?.firstName || ''} ${member?.lastName || ''}</p><p><b>Date:</b> ${new Date(payment.paidAt).toLocaleDateString()}</p><table><tr><td>Total</td><td>${formatCurrency(payment.totalAmount)}</td></tr><tr><td>Paid</td><td>${formatCurrency(payment.paidAmount)}</td></tr><tr><td>Balance due</td><td>${formatCurrency(payment.remainingDue)}</td></tr></table><p class="total">${status === 'PAID' ? 'Payment received' : 'Payment pending'}</p><script>window.print()</script></body></html>`); popup.document.close();
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Invoice - ${payment.invoiceNumber}</title>
+        <style>
+          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
+          .invoice-box { max-width: 800px; margin: auto; padding: 30px; border: 1px solid #e2e8f0; box-shadow: 0 0 10px rgba(0, 0, 0, 0.05); }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #06b6d4; padding-bottom: 20px; }
+          .brand h1 { margin: 0; color: #06b6d4; font-size: 28px; text-transform: uppercase; letter-spacing: 1px; }
+          .brand p { margin: 5px 0 0; color: #64748b; font-size: 14px; }
+          .details { text-align: right; }
+          .details h2 { margin: 0; color: #334155; font-size: 24px; text-transform: uppercase; }
+          .details p { margin: 5px 0; color: #64748b; font-size: 14px; }
+          .status { display: inline-block; padding: 4px 12px; border-radius: 9999px; font-weight: 600; font-size: 12px; margin-top: 10px; }
+          .status.paid { background-color: #d1fae5; color: #059669; }
+          .status.unpaid { background-color: #fee2e2; color: #dc2626; }
+          .info-section { display: flex; justify-content: space-between; margin-bottom: 40px; }
+          .bill-to h3 { margin: 0 0 10px; color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+          .bill-to p { margin: 0 0 5px; font-size: 14px; font-weight: 500; }
+          .table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+          .table th { padding: 12px; border-bottom: 2px solid #cbd5e1; text-align: left; font-size: 12px; text-transform: uppercase; color: #64748b; }
+          .table td { padding: 12px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
+          .table td.amount { text-align: right; font-family: monospace; font-size: 15px; }
+          .table th.amount { text-align: right; }
+          .summary { width: 300px; margin-left: auto; margin-bottom: 40px; }
+          .summary-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+          .summary-row.total { font-weight: bold; font-size: 18px; border-bottom: none; border-top: 2px solid #334155; margin-top: 10px; padding-top: 15px; }
+          .summary-row .amount { font-family: monospace; }
+          .footer { text-align: center; color: #94a3b8; font-size: 12px; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+          @media print {
+            body { padding: 0; }
+            .invoice-box { box-shadow: none; border: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="invoice-box">
+          <div class="header">
+            <div class="brand">
+              <h1>${gymName}</h1>
+              <p>${gymAddress}</p>
+              <p>${gymPhone} | ${gymEmail}</p>
+            </div>
+            <div class="details">
+              <h2>INVOICE</h2>
+              <p># ${payment.invoiceNumber}</p>
+              <p>Date: ${new Date(payment.createdAt).toLocaleDateString()}</p>
+              <div class="status ${status.toLowerCase()}">${status}</div>
+            </div>
+          </div>
+          
+          <div class="info-section">
+            <div class="bill-to">
+              <h3>Billed To</h3>
+              <p>${member.firstName} ${member.lastName}</p>
+              <p>Member ID: ${member.memberId}</p>
+              <p>Phone: ${member.phone}</p>
+              <p>CNIC: ${member.cnic || 'N/A'}</p>
+            </div>
+            <div class="bill-to" style="text-align: right;">
+              <h3>Payment Method</h3>
+              <p>${payment.paymentMethod || 'N/A'}</p>
+              ${payment.paidAt ? `<p>Paid on: ${new Date(payment.paidAt).toLocaleDateString()}</p>` : ''}
+            </div>
+          </div>
+
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th class="amount">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Membership Fee (${payment.membership?.plan?.name || 'Plan'})</td>
+                <td class="amount">${formatCurrency(payment.totalAmount - (payment.admissionFee || 0))}</td>
+              </tr>
+              ${payment.admissionFee > 0 ? `
+              <tr>
+                <td>Admission Fee</td>
+                <td class="amount">${formatCurrency(payment.admissionFee)}</td>
+              </tr>
+              ` : ''}
+            </tbody>
+          </table>
+
+          <div class="summary">
+            <div class="summary-row">
+              <span>Subtotal</span>
+              <span class="amount">${formatCurrency(payment.totalAmount)}</span>
+            </div>
+            <div class="summary-row" style="color: #059669;">
+              <span>Amount Paid</span>
+              <span class="amount">${formatCurrency(payment.paidAmount)}</span>
+            </div>
+            <div class="summary-row total">
+              <span>Balance Due</span>
+              <span class="amount">${formatCurrency(payment.remainingDue)}</span>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p>Thank you for choosing ${gymName}!</p>
+            <p>Generated on ${new Date().toLocaleString()}</p>
+          </div>
+        </div>
+        <script>
+          window.onload = function() { window.print(); }
+        </script>
+      </body>
+      </html>
+    `;
+    
+    popup.document.write(html);
+    popup.document.close();
   };
 
   const getStatusBadge = (status: MemberStatus) => {
@@ -354,11 +486,23 @@ export default function MemberDetailPage() {
         <TabsContent value="attendance">
           <Card className="border-slate-800 bg-slate-900/50">
             <CardHeader>
-              <CardTitle className="text-white">Attendance History</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-cyan-500" />
+                  Attendance History
+                </CardTitle>
+                <Badge variant="outline" className="border-slate-700 text-slate-400">
+                  {attendance.length} records
+                </Badge>
+              </div>
             </CardHeader>
             <CardContent>
               {attendance.length === 0 ? (
-                <div className="py-8 text-center text-slate-500">No attendance records found.</div>
+                <div className="py-12 text-center">
+                  <Clock className="h-10 w-10 text-slate-700 mx-auto mb-3" />
+                  <p className="text-slate-500 text-sm">No attendance records yet.</p>
+                  <p className="text-slate-600 text-xs mt-1">Records appear after the member scans at the ZKTeco device.</p>
+                </div>
               ) : (
                 <Table>
                   <TableHeader>
@@ -367,6 +511,7 @@ export default function MemberDetailPage() {
                       <TableHead>Check In</TableHead>
                       <TableHead>Check Out</TableHead>
                       <TableHead>Duration</TableHead>
+                      <TableHead>Device</TableHead>
                       <TableHead>Source</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -374,17 +519,25 @@ export default function MemberDetailPage() {
                     {attendance.map((log: any) => (
                       <TableRow key={log.id}>
                         <TableCell className="text-white">{formatDate(log.checkIn)}</TableCell>
-                        <TableCell className="text-slate-300">
+                        <TableCell className="text-emerald-400 font-mono text-sm">
                           {new Date(log.checkIn).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                         </TableCell>
-                        <TableCell className="text-slate-300">
+                        <TableCell className="text-blue-400 font-mono text-sm">
                           {log.checkOut
                             ? new Date(log.checkOut).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-                            : '—'}
+                            : <span className="text-slate-600">—</span>}
                         </TableCell>
                         <TableCell className="text-slate-300">{log.duration ? formatDuration(log.duration) : '—'}</TableCell>
+                        <TableCell className="text-slate-400 text-xs">{log.device?.name ?? '—'}</TableCell>
                         <TableCell>
-                          <Badge variant={log.source === 'Device' ? 'default' : 'outline'} className={log.source === 'Device' ? 'bg-cyan-500/15 text-cyan-500 border-transparent' : ''}>
+                          <Badge
+                            variant="outline"
+                            className={
+                              log.source === 'DEVICE'
+                                ? 'bg-cyan-500/15 text-cyan-400 border-transparent'
+                                : 'bg-slate-700/30 text-slate-400 border-transparent'
+                            }
+                          >
                             {log.source}
                           </Badge>
                         </TableCell>

@@ -1,19 +1,28 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/axios';
 import {
   Plus,
   Wifi,
   WifiOff,
   Network,
-  RefreshCcw,
   MoreHorizontal,
   ShieldCheck,
   ShieldX,
   Fingerprint,
+  Trash2,
+  CheckCircle2,
+  RefreshCcw,
 } from 'lucide-react';
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -45,9 +54,19 @@ import {
 } from '@/components/ui/select';
 import { formatDateTime } from '@gms/utils';
 import { AccessResult, DeviceConnectionType } from '@gms/types';
+import { toast } from '@/components/ui/use-toast';
+import { Loader2 } from 'lucide-react';
 
 export default function DevicesPage() {
+  const queryClient = useQueryClient();
   const [showAddDevice, setShowAddDevice] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newDevice, setNewDevice] = useState({
+    name: '',
+    ipAddress: '',
+    port: 4370,
+    connectionType: 'ETHERNET',
+  });
 
   const { data: devicesData, isLoading: isLoadingDevices } = useQuery({
     queryKey: ['devices'],
@@ -70,6 +89,60 @@ export default function DevicesPage() {
 
   const onlineCount = devices.filter((d: any) => d.status === 'ONLINE').length;
   const offlineCount = devices.filter((d: any) => d.status === 'OFFLINE').length;
+
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+
+  const handleSync = async (deviceId: string) => {
+    try {
+      setSyncingId(deviceId);
+      const res = await api.post(`/devices/${deviceId}/sync`);
+      toast({ title: 'Sync Successful', description: res.data.message || 'Device synced successfully.', variant: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+      queryClient.invalidateQueries({ queryKey: ['access-logs'] });
+    } catch (error: any) {
+      toast({ title: 'Sync Failed', description: error.response?.data?.message || 'Failed to sync device.', variant: 'destructive' });
+    } finally {
+      setSyncingId(null);
+    }
+  };
+
+  const handleTestConnection = async (deviceId: string) => {
+    try {
+      toast({ title: 'Testing...', description: 'Connecting to device...' });
+      await api.post(`/devices/${deviceId}/test-connection`);
+      toast({ title: 'Connection Successful', description: 'Device is reachable on the network.', variant: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+    } catch (error: any) {
+      toast({ title: 'Connection Failed', description: error.response?.data?.message || 'Device is unreachable.', variant: 'destructive' });
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+    }
+  };
+
+  const handleDelete = async (deviceId: string) => {
+    if (!confirm('Are you sure you want to remove this device?')) return;
+    try {
+      await api.delete(`/devices/${deviceId}`);
+      toast({ title: 'Device Removed', description: 'Device has been deleted from the system.' });
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to delete device.', variant: 'destructive' });
+    }
+  };
+
+  const handleAddDevice = async () => {
+    try {
+      setIsSubmitting(true);
+      await api.post('/devices', newDevice);
+      toast({ title: 'Success', description: 'Device added successfully.', variant: 'success' });
+      setShowAddDevice(false);
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+      setNewDevice({ name: '', ipAddress: '', port: 4370, connectionType: 'ETHERNET' });
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to add device', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -158,12 +231,34 @@ export default function DevicesPage() {
                 </div>
 
                 <div className="mt-4 flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1 border-slate-700 bg-slate-900 text-slate-300 text-xs">
-                    <RefreshCcw className="mr-1.5 h-3 w-3" /> Sync
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1 border-slate-700 bg-slate-900 text-slate-300 text-xs"
+                    onClick={() => handleSync(device.id)}
+                    disabled={syncingId === device.id}
+                  >
+                    <RefreshCcw className={`mr-1.5 h-3 w-3 ${syncingId === device.id ? 'animate-spin' : ''}`} /> 
+                    {syncingId === device.id ? 'Syncing...' : 'Sync'}
                   </Button>
-                  <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white h-8 w-8">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
+                  
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white h-8 w-8">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleTestConnection(device.id)}>
+                        <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-500" />
+                        <span>Test Connection</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDelete(device.id)} className="text-rose-500">
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        <span>Delete Device</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </CardContent>
             </Card>
@@ -250,6 +345,8 @@ export default function DevicesPage() {
               <Label className="text-slate-300">Device Name</Label>
               <Input
                 placeholder="e.g., Main Entrance"
+                value={newDevice.name}
+                onChange={(e) => setNewDevice({ ...newDevice, name: e.target.value })}
                 className="border-slate-800 bg-slate-950 text-white placeholder:text-slate-500"
               />
             </div>
@@ -258,21 +355,28 @@ export default function DevicesPage() {
                 <Label className="text-slate-300">IP Address</Label>
                 <Input
                   placeholder="192.168.1.100"
+                  value={newDevice.ipAddress}
+                  onChange={(e) => setNewDevice({ ...newDevice, ipAddress: e.target.value })}
                   className="border-slate-800 bg-slate-950 text-white placeholder:text-slate-500"
                 />
               </div>
               <div className="space-y-2">
                 <Label className="text-slate-300">Port</Label>
                 <Input
+                  type="number"
                   placeholder="4370"
-                  defaultValue="4370"
+                  value={newDevice.port}
+                  onChange={(e) => setNewDevice({ ...newDevice, port: parseInt(e.target.value) || 4370 })}
                   className="border-slate-800 bg-slate-950 text-white placeholder:text-slate-500"
                 />
               </div>
             </div>
             <div className="space-y-2">
               <Label className="text-slate-300">Connection Type</Label>
-              <Select defaultValue="ETHERNET">
+              <Select 
+                value={newDevice.connectionType} 
+                onValueChange={(value) => setNewDevice({ ...newDevice, connectionType: value })}
+              >
                 <SelectTrigger className="border-slate-800 bg-slate-950 text-white">
                   <SelectValue />
                 </SelectTrigger>
@@ -287,8 +391,19 @@ export default function DevicesPage() {
             <Button variant="outline" onClick={() => setShowAddDevice(false)} className="border-slate-700 text-slate-300">
               Cancel
             </Button>
-            <Button className="bg-cyan-600 text-white hover:bg-cyan-500" onClick={() => setShowAddDevice(false)}>
-              Add Device
+            <Button 
+              className="bg-cyan-600 text-white hover:bg-cyan-500" 
+              onClick={handleAddDevice}
+              disabled={isSubmitting || !newDevice.name || !newDevice.ipAddress}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                'Add Device'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

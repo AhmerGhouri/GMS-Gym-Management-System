@@ -12,6 +12,7 @@ import { CronModule } from './modules/cron/cron.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { UsersModule } from './modules/users/users.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ZktecoModule } from './core/services/zkteco.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
       envFilePath: '.env',
     }),
     DatabaseModule,
+    ZktecoModule,
     NotificationsModule,
     AuthModule,
     MembersModule,

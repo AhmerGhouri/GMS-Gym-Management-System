@@ -2,10 +2,15 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
 import { PaymentStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ZktecoService } from '../../core/services/zkteco.service';
 
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PrismaService, private readonly notifications: NotificationsService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+    private readonly zkteco: ZktecoService,
+  ) {}
 
   async getPayments() {
     return this.prisma.payment.findMany({
@@ -72,13 +77,59 @@ export class PaymentsService {
         member: true,
       },
     });
+
     if (updatedPayment.paymentStatus === PaymentStatus.PAID) {
-      await this.prisma.member.update({ where: { id: updatedPayment.memberId }, data: { status: 'ACTIVE' } });
+      // Activate the member and membership
+      await this.prisma.member.update({
+        where: { id: updatedPayment.memberId },
+        data: { status: 'ACTIVE' },
+      });
       if (updatedPayment.membershipId) {
-        await this.prisma.membership.update({ where: { id: updatedPayment.membershipId }, data: { status: 'ACTIVE' } });
+        await this.prisma.membership.update({
+          where: { id: updatedPayment.membershipId },
+          data: { status: 'ACTIVE' },
+        });
       }
-      await this.notifications.notifyAdmins('Payment received', `Invoice ${updatedPayment.invoiceNumber} was marked paid.`, 'PAYMENT_RECEIVED', updatedPayment.memberId);
+
+      await this.notifications.notifyAdmins(
+        'Payment received',
+        `Invoice ${updatedPayment.invoiceNumber} was marked paid.`,
+        'PAYMENT_RECEIVED',
+        updatedPayment.memberId,
+      );
+
+      // Provision member on all active ZKTeco devices
+      await this.provisionMemberOnDevices(updatedPayment.member);
     }
+
     return updatedPayment;
+  }
+
+  /**
+   * Enqueue SyncJobs to add this member to every active device.
+   * The AttendanceSyncService processes these jobs every minute.
+   */
+  private async provisionMemberOnDevices(member: any) {
+    const devices = await this.prisma.device.findMany({ where: { isActive: true } });
+    for (const device of devices) {
+      // Avoid duplicate jobs
+      const existing = await this.prisma.syncJob.findFirst({
+        where: {
+          deviceId: device.id,
+          memberId: member.id,
+          action: 'ENABLE_USER',
+          status: 'PENDING',
+        },
+      });
+      if (!existing) {
+        await this.prisma.syncJob.create({
+          data: {
+            deviceId: device.id,
+            memberId: member.id,
+            action: 'ENABLE_USER',
+          },
+        });
+      }
+    }
   }
 }

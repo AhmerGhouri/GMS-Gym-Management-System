@@ -46,6 +46,7 @@ export default function SettingsPage() {
     if (values.gym_phone) setGymPhone(String(values.gym_phone));
     if (values.gym_email) setGymEmail(String(values.gym_email));
   }, [settingsData]);
+  
   useEffect(() => { if (slotsData?.data) setSlots(slotsData.data); }, [slotsData]);
 
   const [notifications, setNotifications] = useState({
@@ -95,7 +96,7 @@ export default function SettingsPage() {
         <h1 className="text-3xl font-bold tracking-tight text-white">Settings</h1>
         <p className="text-slate-400">Manage your gym configuration and preferences.</p>
       </div>
-
+      
       <Tabs defaultValue="general" className="space-y-6">
         <TabsList className="bg-slate-800/50">
           <TabsTrigger value="general">General</TabsTrigger>
@@ -131,7 +132,7 @@ export default function SettingsPage() {
                   <Label className="text-slate-300">Address</Label>
                   <Textarea
                     value={gymAddress}
-                    onChange={(e : any) => setGymAddress(e.currentTarget.value)}
+                    onChange={(e: any) => setGymAddress(e.currentTarget.value)}
                     className="border-slate-800 bg-slate-950 text-white focus-visible:ring-cyan-500 min-h-[80px]"
                   />
                 </div>
@@ -253,9 +254,18 @@ export default function SettingsPage() {
                 <Users className="h-5 w-5 text-cyan-500" />
                 <CardTitle className="text-white">Staff & Users</CardTitle>
               </div>
-              <Link href="/settings/users/new"><Button className="bg-cyan-600 text-white hover:bg-cyan-500" size="sm">
-                Add User
-              </Button></Link>
+              <div className="flex gap-2">
+                <Link href="/settings/roles">
+                  <Button variant="outline" className="border-cyan-600 text-cyan-500 hover:bg-cyan-950" size="sm">
+                    Manage Roles
+                  </Button>
+                </Link>
+                <Link href="/settings/users/new">
+                  <Button className="bg-cyan-600 text-white hover:bg-cyan-500" size="sm">
+                    Add User
+                  </Button>
+                </Link>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -290,7 +300,16 @@ export default function SettingsPage() {
                       <TableCell>
                         <Badge variant={user.isActive ? 'success' : 'secondary'}>{user.isActive ? 'Active' : 'Inactive'}</Badge>
                       </TableCell>
-                      <TableCell className="flex justify-end gap-1"><Link href={`/settings/users/${user.id}/edit`}><Button size="sm" variant="ghost">Edit</Button></Link>{user.isActive ? <Button size="sm" variant="ghost" className="text-rose-400" onClick={async () => { if (confirm(`Deactivate ${user.email}?`)) { await api.delete(`/users/${user.id}`); refetchUsers(); } }}>Deactivate</Button> : <Button size="sm" variant="ghost" className="text-emerald-400" onClick={async () => { await api.patch(`/users/${user.id}`, { isActive: true }); refetchUsers(); }}>Activate</Button>}</TableCell>
+                      <TableCell className="flex justify-end gap-1">
+                        <Link href={`/settings/users/${user.id}/edit`}>
+                          <Button size="sm" variant="ghost">Edit</Button>
+                        </Link>
+                        {user.isActive ? (
+                          <Button size="sm" variant="ghost" className="text-rose-400" onClick={async () => { if (confirm(`Deactivate ${user.email}?`)) { await api.delete(`/users/${user.id}`); refetchUsers(); } }}>Deactivate</Button>
+                        ) : (
+                          <Button size="sm" variant="ghost" className="text-emerald-400" onClick={async () => { await api.patch(`/users/${user.id}`, { isActive: true }); refetchUsers(); }}>Activate</Button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

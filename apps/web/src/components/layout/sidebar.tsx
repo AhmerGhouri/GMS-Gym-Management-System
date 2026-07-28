@@ -11,7 +11,8 @@ import {
   LogOut,
   Dumbbell,
   Fingerprint,
-  FileText
+  FileText,
+  Bell
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/stores/auth.store';
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'Attendance', href: '/attendance', icon: CalendarDays },
   { name: 'Access Control', href: '/devices', icon: Fingerprint },
   { name: 'Reports', href: '/reports', icon: FileText },
+  { name: 'Notifications', href: '/notifications', icon: Bell },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
@@ -49,16 +51,16 @@ export function Sidebar() {
                 key={item.name}
                 href={item.href}
                 className={cn(
-                  'group flex items-center rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
+                  'group flex items-center rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-300 relative',
                   isActive
-                    ? 'bg-cyan-500/10 text-cyan-500'
-                    : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                    ? 'bg-gradient-to-r from-cyan-500/20 to-transparent text-cyan-400 shadow-[inset_2px_0_0_0_rgba(34,211,238,1)]'
+                    : 'text-slate-400 hover:bg-slate-900/50 hover:text-slate-200 hover:pl-4'
                 )}
               >
                 <item.icon
                   className={cn(
-                    'mr-3 h-5 w-5 flex-shrink-0',
-                    isActive ? 'text-cyan-500' : 'text-slate-500 group-hover:text-slate-400'
+                    'mr-3 h-5 w-5 flex-shrink-0 transition-colors',
+                    isActive ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-slate-500 group-hover:text-slate-300'
                   )}
                   aria-hidden="true"
                 />
