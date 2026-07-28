@@ -56,6 +56,11 @@ export class CreateMemberDto {
   @IsBoolean()
   includeAdmissionFee?: boolean;
 
+  @ApiPropertyOptional({ example: 'Morning' })
+  @IsOptional()
+  @IsString()
+  timeSlot?: string;
+
   @ApiProperty({ example: '03001234567' })
   @IsString()
   @IsNotEmpty()

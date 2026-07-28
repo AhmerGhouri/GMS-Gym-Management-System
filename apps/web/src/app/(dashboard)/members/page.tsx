@@ -11,6 +11,7 @@ import { Member, ApiResponse, PaginatedResult, MemberStatus } from '@gms/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -36,12 +37,15 @@ export default function MembersPage() {
   const searchParams = useSearchParams();
   const status = searchParams.get('status') || undefined;
   const gender = searchParams.get('gender') || undefined;
+  const [timeSlot, setTimeSlot] = useState<string | undefined>();
+  const { data: slotsData } = useQuery({ queryKey: ['gym-slots'], queryFn: async () => (await api.get('/settings/slots')).data });
+  const slots = slotsData?.data || [];
 
   const { data, isLoading } = useQuery({
-    queryKey: ['members', page, search, status, gender],
+    queryKey: ['members', page, search, status, gender, timeSlot],
     queryFn: async () => {
       const res = await api.get<ApiResponse<PaginatedResult<Member>>>('/members', {
-        params: { page, limit: 10, search: search || undefined, status, gender },
+        params: { page, limit: 10, search: search || undefined, status, gender, timeSlot },
       });
       return res.data;
     },
@@ -111,6 +115,10 @@ export default function MembersPage() {
               className="pl-9 border-slate-800 bg-slate-950 text-white placeholder:text-slate-500"
             />
           </div>
+          <Select onValueChange={(value) => { setTimeSlot(value === 'all' ? undefined : value); setPage(1); }}>
+            <SelectTrigger className="w-44 border-slate-800 bg-slate-950 text-white"><SelectValue placeholder="All slots" /></SelectTrigger>
+            <SelectContent><SelectItem value="all">All slots</SelectItem>{slots.map((slot: any) => <SelectItem key={slot.id} value={slot.name}>{slot.name}</SelectItem>)}</SelectContent>
+          </Select>
         </div>
 
         <Table>
@@ -120,6 +128,7 @@ export default function MembersPage() {
               <TableHead>Contact</TableHead>
               <TableHead>Joined</TableHead>
               <TableHead>Membership Plan</TableHead>
+              <TableHead>Time Slot</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -127,13 +136,13 @@ export default function MembersPage() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+                <TableCell colSpan={7} className="h-24 text-center text-slate-500">
                   Loading members...
                 </TableCell>
               </TableRow>
             ) : members.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+                <TableCell colSpan={7} className="h-24 text-center text-slate-500">
                   No members found.
                 </TableCell>
               </TableRow>
@@ -163,6 +172,7 @@ export default function MembersPage() {
                   <TableCell className="text-slate-300">
                     {(member as any).activeMembership?.plan?.name || 'No active plan'}
                   </TableCell>
+                  <TableCell className="text-slate-300">{(member as any).timeSlot || '—'}</TableCell>
                   <TableCell>
                     {getStatusBadge(member.status)}
                   </TableCell>

@@ -1,10 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
 import { PaymentStatus } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly notifications: NotificationsService) {}
 
   async getPayments() {
     return this.prisma.payment.findMany({
@@ -64,12 +65,20 @@ export class PaymentsService {
       updateData.remainingDue = 0;
     }
 
-    return this.prisma.payment.update({
+    const updatedPayment = await this.prisma.payment.update({
       where: { id },
       data: updateData,
       include: {
         member: true,
       },
     });
+    if (updatedPayment.paymentStatus === PaymentStatus.PAID) {
+      await this.prisma.member.update({ where: { id: updatedPayment.memberId }, data: { status: 'ACTIVE' } });
+      if (updatedPayment.membershipId) {
+        await this.prisma.membership.update({ where: { id: updatedPayment.membershipId }, data: { status: 'ACTIVE' } });
+      }
+      await this.notifications.notifyAdmins('Payment received', `Invoice ${updatedPayment.invoiceNumber} was marked paid.`, 'PAYMENT_RECEIVED', updatedPayment.memberId);
+    }
+    return updatedPayment;
   }
 }

@@ -38,6 +38,7 @@ const memberSchema = z.object({
   emergencyContact: z.string().optional(),
   notes: z.string().optional(),
   status: z.nativeEnum(MemberStatus).optional(),
+  timeSlot: z.string().optional(),
 });
 
 type MemberFormValues = z.infer<typeof memberSchema>;
@@ -70,6 +71,8 @@ export default function EditMemberPage() {
     },
     enabled: !!id,
   });
+  const { data: slotsData } = useQuery({ queryKey: ['gym-slots'], queryFn: async () => (await api.get('/settings/slots')).data });
+  const slots = slotsData?.data || [];
 
   useEffect(() => {
     if (memberData?.data) {
@@ -87,6 +90,7 @@ export default function EditMemberPage() {
         emergencyContact: member.emergencyContact || '',
         notes: member.notes || '',
         status: member.status,
+        timeSlot: member.timeSlot || '',
       });
     }
   }, [memberData, reset]);
@@ -228,6 +232,13 @@ export default function EditMemberPage() {
                       <SelectItem value={MemberStatus.SUSPENDED}>Suspended</SelectItem>
                       <SelectItem value={MemberStatus.DELETED}>Deleted</SelectItem>
                     </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-300">Training Slot</Label>
+                  <Select defaultValue={memberData?.data?.timeSlot || undefined} onValueChange={(value) => setValue('timeSlot', value)}>
+                    <SelectTrigger className="border-slate-800 bg-slate-950 text-white"><SelectValue placeholder="Select a slot" /></SelectTrigger>
+                    <SelectContent>{slots.map((slot: any) => <SelectItem key={slot.id} value={slot.name}>{slot.name} ({slot.start} - {slot.end})</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               </CardContent>

@@ -110,6 +110,7 @@ export default function MemberDetailPage() {
       });
       queryClient.invalidateQueries({ queryKey: ['member', memberId] });
       queryClient.invalidateQueries({ queryKey: ['memberships'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
       setShowAssignDialog(false);
       setSelectedPlanId('');
       setIncludeAdmissionFee(false);
@@ -137,9 +138,17 @@ export default function MemberDetailPage() {
     }
   };
 
+  const printInvoice = (payment: any) => {
+    const status = payment.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID';
+    const popup = window.open('', '_blank');
+    if (!popup) return;
+    popup.document.write(`<html><head><title>Invoice ${payment.invoiceNumber}</title><style>body{font-family:Arial;padding:40px;color:#0f172a}.header{display:flex;justify-content:space-between;border-bottom:2px solid #0891b2;padding-bottom:16px}.status{padding:7px 12px;border-radius:999px;color:#fff;background:${status === 'PAID' ? '#059669' : '#dc2626'}}table{width:100%;border-collapse:collapse;margin-top:30px}td{padding:12px;border-bottom:1px solid #ddd}.total{font-size:22px;font-weight:bold}</style></head><body><div class="header"><div><h1>Gym Management System</h1><p>Invoice ${payment.invoiceNumber}</p></div><span class="status">${status}</span></div><p><b>Member:</b> ${member?.firstName || ''} ${member?.lastName || ''}</p><p><b>Date:</b> ${new Date(payment.paidAt).toLocaleDateString()}</p><table><tr><td>Total</td><td>${formatCurrency(payment.totalAmount)}</td></tr><tr><td>Paid</td><td>${formatCurrency(payment.paidAmount)}</td></tr><tr><td>Balance due</td><td>${formatCurrency(payment.remainingDue)}</td></tr></table><p class="total">${status === 'PAID' ? 'Payment received' : 'Payment pending'}</p><script>window.print()</script></body></html>`); popup.document.close();
+  };
+
   const getStatusBadge = (status: MemberStatus) => {
     switch (status) {
       case 'ACTIVE': return <Badge variant="success">Active</Badge>;
+      case 'INACTIVE': return <Badge variant="secondary">Inactive</Badge>;
       case 'INACTIVE': return <Badge variant="secondary">Inactive</Badge>;
       case 'SUSPENDED': return <Badge variant="warning">Suspended</Badge>;
       case 'DELETED': return <Badge variant="destructive">Deleted</Badge>;
@@ -303,6 +312,7 @@ export default function MemberDetailPage() {
                       <TableHead>End Date</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Payment</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -319,6 +329,16 @@ export default function MemberDetailPage() {
                             <Badge variant="destructive">Unpaid</Badge>
                           ) : (
                             <Badge variant="outline">Not due</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {ms.status === 'ACTIVE' ? (
+                            <Button size="sm" variant="outline" onClick={async () => {
+                              try { await api.patch(`/memberships/${ms.id}`, { status: 'INACTIVE' }); queryClient.invalidateQueries({ queryKey: ['member', memberId] }); toast({ title: 'Membership Inactivated', description: 'You can now assign a different plan.', variant: 'success' }); }
+                              catch (err: any) { toast({ title: 'Error', description: err.response?.data?.message || 'Unable to update membership.', variant: 'destructive' }); }
+                            }}>Inactivate</Button>
+                          ) : (
+                            <Button size="sm" onClick={() => toast({ title: 'Payment required', description: 'Mark the pending voucher paid from the Payments tab to activate this membership.', variant: 'destructive' })}>Activate</Button>
                           )}
                         </TableCell>
                       </TableRow>
@@ -413,6 +433,7 @@ export default function MemberDetailPage() {
                         <TableCell>{getPaymentStatusBadge(payment.paymentStatus)}</TableCell>
                         <TableCell className="text-slate-300">{formatDate(payment.paidAt)}</TableCell>
                         <TableCell className="text-right">
+                          <Button size="sm" variant="outline" className="mr-2" onClick={() => printInvoice(payment)}>Invoice</Button>
                           {payment.paymentStatus !== 'PAID' && payment.paymentStatus !== 'REFUNDED' && (
                             <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500" onClick={() => markPaymentPaid(payment.id)}>
                               Mark Paid

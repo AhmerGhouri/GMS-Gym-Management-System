@@ -37,6 +37,7 @@ enum MemberStatus {
 
 enum MembershipStatus {
   ACTIVE
+  INACTIVE
   EXPIRED
   FROZEN
   SUSPENDED
@@ -145,6 +146,7 @@ model User {
   firstName    String    @map("first_name")
   lastName     String    @map("last_name")
   role         UserRole
+  customRoleId String?   @map("custom_role_id")
   isActive     Boolean   @default(true) @map("is_active")
   refreshToken String?   @map("refresh_token")
   lastLoginAt  DateTime? @map("last_login_at")
@@ -152,8 +154,19 @@ model User {
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
   auditLogs AuditLog[]
+  customRole CustomRole? @relation(fields: [customRoleId], references: [id])
 
   @@map("users")
+}
+
+model CustomRole {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  permissions Json
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  users       User[]
+  @@map("custom_roles")
 }
 
 /// Gym members (customers)
@@ -174,6 +187,7 @@ model Member {
   status           MemberStatus @default(ACTIVE)
   joiningDate      DateTime     @default(now()) @map("joining_date")
   notes            String?
+  timeSlot         String?      @map("time_slot")
   createdAt        DateTime     @default(now()) @map("created_at")
   updatedAt        DateTime     @updatedAt @map("updated_at")
 
@@ -199,6 +213,7 @@ model MembershipPlan {
   durationDays Int          @map("duration_days")
   price        Decimal      @db.Decimal(10, 2)
   admissionFee Decimal      @default(0) @map("admission_fee") @db.Decimal(10, 2)
+  activities   Json?        @map("activities")
   description  String?
   isActive     Boolean      @default(true) @map("is_active")
   createdAt    DateTime     @default(now()) @map("created_at")

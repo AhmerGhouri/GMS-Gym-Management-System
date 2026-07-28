@@ -1,12 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../core/database/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ExpirationService {
   private readonly logger = new Logger(ExpirationService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly notifications: NotificationsService) {}
 
   // Run at midnight every day
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
@@ -88,6 +89,7 @@ export class ExpirationService {
             }
           });
           this.logger.log(`Successfully expired membership ${membership.id} for member ${membership.memberId}`);
+          await this.notifications.notifyAdmins('Membership expired', `A membership expired and an unpaid renewal voucher was created.`, 'MEMBERSHIP_EXPIRY', membership.memberId);
         } catch (error) {
           this.logger.error(`Failed to expire membership ${membership.id}: ${(error as Error).message}`);
         }

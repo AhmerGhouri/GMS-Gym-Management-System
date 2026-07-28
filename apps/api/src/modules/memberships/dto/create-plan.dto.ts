@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsNumber, IsOptional, IsEnum, Min } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsOptional, IsEnum, Min, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PlanDuration, PlanGender } from '@prisma/client';
 
@@ -32,6 +32,11 @@ export class CreatePlanDto {
   @IsNumber()
   @Min(0)
   admissionFee?: number;
+
+  @ApiPropertyOptional({ example: ['Yoga', 'Pilates'] })
+  @IsOptional()
+  @IsArray()
+  activities?: unknown[];
 
   @ApiPropertyOptional({ example: 'Access to gym equipment' })
   @IsOptional()

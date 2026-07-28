@@ -9,6 +9,9 @@ import { DevicesModule } from './modules/devices/devices.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { CronModule } from './modules/cron/cron.module';
+import { SettingsModule } from './modules/settings/settings.module';
+import { UsersModule } from './modules/users/users.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -17,6 +20,7 @@ import { CronModule } from './modules/cron/cron.module';
       envFilePath: '.env',
     }),
     DatabaseModule,
+    NotificationsModule,
     AuthModule,
     MembersModule,
     MembershipsModule,
@@ -25,6 +29,8 @@ import { CronModule } from './modules/cron/cron.module';
     PaymentsModule,
     DashboardModule,
     CronModule,
+    SettingsModule,
+    UsersModule,
   ],
 })
 export class AppModule {}

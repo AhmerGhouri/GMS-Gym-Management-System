@@ -2,10 +2,11 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { MembershipStatus } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { CreatePlanDto, UpdatePlanDto, UpdateMembershipDto } from './dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class MembershipsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly notifications: NotificationsService) {}
 
   async getPlans() {
     return this.prisma.membershipPlan.findMany({
@@ -15,14 +16,14 @@ export class MembershipsService {
 
   async createPlan(dto: CreatePlanDto) {
     return this.prisma.membershipPlan.create({
-      data: dto,
+      data: dto as any,
     });
   }
 
   async updatePlan(id: string, dto: UpdatePlanDto) {
     return this.prisma.membershipPlan.update({
       where: { id },
-      data: dto,
+      data: dto as any,
     });
   }
 
@@ -132,29 +133,72 @@ export class MembershipsService {
     const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + plan.durationDays);
 
-    return this.prisma.membership.create({
-      data: {
+    const membership = await this.prisma.$transaction(async (tx) => {
+      const createdMembership = await tx.membership.create({
+        data: {
         memberId,
         planId,
         planPrice: plan.price,
         admissionFee: includeAdmissionFee ? plan.admissionFee : 0,
         startDate,
         endDate,
-        status: 'ACTIVE',
-      },
+          status: 'INACTIVE',
+        },
+      });
+      const totalAmount = Number(plan.price) + (includeAdmissionFee ? Number(plan.admissionFee) : 0);
+      await tx.payment.create({
+        data: {
+        invoiceNumber: `INV-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+        memberId,
+          membershipId: createdMembership.id,
+        amount: totalAmount,
+        discount: 0,
+        totalAmount,
+        paidAmount: 0,
+        remainingDue: totalAmount,
+        paymentMethod: 'CASH',
+        paymentStatus: 'PENDING',
+        notes: 'Initial membership payment',
+        },
+      });
+      await tx.member.update({ where: { id: memberId }, data: { status: 'INACTIVE' } });
+      return createdMembership;
     });
+    await this.notifications.notifyAdmins('Membership awaiting payment', `${member.firstName} ${member.lastName} was assigned ${plan.name}. The payment voucher is pending.`, 'PAYMENT_DUE', memberId);
+    return membership;
   }
 
   async updateMembership(id: string, dto: UpdateMembershipDto) {
+    const membership = await this.prisma.membership.findUnique({ where: { id } });
+    if (!membership) throw new NotFoundException('Membership not found');
+    if (dto.status === MembershipStatus.ACTIVE) {
+      const [otherActive, unpaid] = await Promise.all([
+        this.prisma.membership.count({
+          where: { memberId: membership.memberId, status: MembershipStatus.ACTIVE, id: { not: id } },
+        }),
+        this.prisma.payment.count({
+          where: { membershipId: id, paymentStatus: { in: ['PENDING', 'PARTIAL'] }, remainingDue: { gt: 0 } },
+        }),
+      ]);
+      if (otherActive > 0) throw new BadRequestException('This member already has another active membership.');
+      if (unpaid > 0) throw new BadRequestException('Mark the membership payment paid before activating it.');
+    }
     const data: any = { ...dto };
     if (dto.endDate) data.endDate = new Date(dto.endDate);
     if (dto.frozenAt) data.frozenAt = new Date(dto.frozenAt);
     if (dto.frozenUntil) data.frozenUntil = new Date(dto.frozenUntil);
 
-    return this.prisma.membership.update({
+    const updatedMembership = await this.prisma.membership.update({
       where: { id },
       data,
     });
+    if (dto.status === MembershipStatus.ACTIVE) {
+      await this.prisma.member.update({ where: { id: membership.memberId }, data: { status: 'ACTIVE' } });
+    }
+    if (dto.status === MembershipStatus.INACTIVE || dto.status === MembershipStatus.SUSPENDED || dto.status === MembershipStatus.CANCELLED) {
+      await this.prisma.member.update({ where: { id: membership.memberId }, data: { status: 'INACTIVE' } });
+    }
+    return updatedMembership;
   }
 
   async deleteMembership(id: string) {

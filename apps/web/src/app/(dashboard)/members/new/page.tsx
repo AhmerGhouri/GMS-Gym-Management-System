@@ -34,6 +34,7 @@ const memberSchema = z.object({
   joiningDate: z.string().optional(),
   planId: z.string().optional(),
   includeAdmissionFee: z.boolean().optional(),
+  timeSlot: z.string().optional(),
   phone: z.string().min(10, 'Phone number must be at least 10 digits'),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
   cnic: z.string().optional(),
@@ -73,6 +74,8 @@ export default function NewMemberPage() {
   });
 
   const plans = (plansData?.data || []).filter((plan: any) => plan.isActive);
+  const { data: slotsData } = useQuery({ queryKey: ['gym-slots'], queryFn: async () => (await api.get('/settings/slots')).data });
+  const slots = slotsData?.data || [];
 
   const onSubmit = async (data: MemberFormValues) => {
     setIsLoading(true);
@@ -222,6 +225,13 @@ export default function NewMemberPage() {
                   <input type="checkbox" className="h-4 w-4" {...register('includeAdmissionFee')} />
                   Apply the plan&apos;s admission fee
                 </label>
+                <div className="space-y-2">
+                  <Label className="text-slate-300">Training Slot</Label>
+                  <Select onValueChange={(value) => setValue('timeSlot', value)}>
+                    <SelectTrigger className="border-slate-800 bg-slate-950 text-white"><SelectValue placeholder="Select morning or evening" /></SelectTrigger>
+                    <SelectContent>{slots.map((slot: any) => <SelectItem key={slot.id} value={slot.name}>{slot.name} ({slot.start} - {slot.end})</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
               </CardContent>
             </Card>
 

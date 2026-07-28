@@ -66,6 +66,7 @@ const planSchema = z.object({
   durationDays: z.coerce.number().min(1, 'Duration must be at least 1 day'),
   price: z.coerce.number().min(0, 'Price cannot be negative'),
   admissionFee: z.coerce.number().min(0, 'Admission fee cannot be negative'),
+  activities: z.string().optional(),
   description: z.string().optional(),
 });
 
@@ -75,6 +76,8 @@ export default function MembershipsPage() {
   const queryClient = useQueryClient();
   const [showPlanDialog, setShowPlanDialog] = useState(false);
   const [editingPlan, setEditingPlan] = useState<any>(null);
+  const [planGender, setPlanGender] = useState('UNISEX');
+  const [activities, setActivities] = useState<Array<{ name: string; price: string }>>([]);
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<PlanFormValues>({
     resolver: zodResolver(planSchema),
@@ -97,13 +100,16 @@ export default function MembershipsPage() {
         durationDays: editingPlan.durationDays,
         price: Number(editingPlan.price),
         admissionFee: Number(editingPlan.admissionFee || 0),
+        activities: Array.isArray(editingPlan.activities) ? editingPlan.activities.join(', ') : '',
         description: editingPlan.description || '',
       });
+      setPlanGender(editingPlan.gender || 'UNISEX');
+      setActivities(Array.isArray(editingPlan.activities) ? editingPlan.activities.map((item: any) => typeof item === 'string' ? { name: item, price: '' } : item) : []);
     }
   }, [editingPlan, reset]);
 
   const createPlanMutation = useMutation({
-    mutationFn: async (data: PlanFormValues) => {
+    mutationFn: async (data: any) => {
       const res = await api.post('/memberships/plans', data);
       return res.data;
     },
@@ -118,7 +124,7 @@ export default function MembershipsPage() {
   });
 
   const updatePlanMutation = useMutation({
-    mutationFn: async (data: PlanFormValues & { id: string }) => {
+    mutationFn: async (data: any) => {
       const { id, ...rest } = data;
       const res = await api.patch(`/memberships/plans/${id}`, rest);
       return res.data;
@@ -136,6 +142,8 @@ export default function MembershipsPage() {
   const closePlanDialog = () => {
     setShowPlanDialog(false);
     setEditingPlan(null);
+    setPlanGender('UNISEX');
+    setActivities([]);
     reset({
       duration: PlanDuration.MONTHLY,
       gender: 'UNISEX',
@@ -154,6 +162,8 @@ export default function MembershipsPage() {
 
   const openCreateDialog = () => {
     setEditingPlan(null);
+    setPlanGender('UNISEX');
+    setActivities([]);
     reset({
       duration: PlanDuration.MONTHLY,
       gender: 'UNISEX',
@@ -167,10 +177,14 @@ export default function MembershipsPage() {
   };
 
   const onSubmit = (data: PlanFormValues) => {
+    const normalizedData = {
+      ...data,
+      activities: planGender === 'FEMALE' ? activities.filter((activity) => activity.name.trim()) : [],
+    };
     if (editingPlan) {
-      updatePlanMutation.mutate({ ...data, id: editingPlan.id });
+      updatePlanMutation.mutate({ ...normalizedData, id: editingPlan.id });
     } else {
-      createPlanMutation.mutate(data);
+      createPlanMutation.mutate(normalizedData);
     }
   };
 
@@ -196,6 +210,7 @@ export default function MembershipsPage() {
   const getMembershipStatusBadge = (status: MembershipStatus) => {
     switch (status) {
       case 'ACTIVE': return <Badge variant="success">Active</Badge>;
+      case 'INACTIVE': return <Badge variant="secondary">Inactive</Badge>;
       case 'EXPIRED': return <Badge variant="secondary">Expired</Badge>;
       case 'FROZEN': return <Badge className="border-transparent bg-blue-500/15 text-blue-500">Frozen</Badge>;
       case 'SUSPENDED': return <Badge variant="warning">Suspended</Badge>;
@@ -357,6 +372,18 @@ export default function MembershipsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-32 bg-slate-900 border-slate-800 text-slate-300">
                           <DropdownMenuItem
+                            className="hover:bg-slate-800 hover:text-white cursor-pointer"
+                            onClick={async () => {
+                              const status = membership.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+                              try {
+                                await api.patch(`/memberships/${membership.id}`, { status });
+                                queryClient.invalidateQueries({ queryKey: ['memberships'] });
+                                toast({ title: status === 'ACTIVE' ? 'Membership Activated' : 'Membership Inactivated', description: status === 'ACTIVE' ? 'Membership is active.' : 'You can now assign another plan.', variant: 'success' });
+                              } catch (err: any) { toast({ title: 'Error', description: err.response?.data?.message || 'Unable to update membership.', variant: 'destructive' }); }
+                            }}
+                          >{membership.status === 'ACTIVE' ? 'Inactivate' : 'Activate'}</DropdownMenuItem>
+                          <DropdownMenuSeparator className="bg-slate-800" />
+                          <DropdownMenuItem
                             className="hover:bg-slate-800 hover:text-white cursor-pointer text-destructive"
                             onClick={async () => {
                               if (confirm('Delete this membership?')) {
@@ -388,7 +415,7 @@ export default function MembershipsPage() {
         if (!open) closePlanDialog();
         else setShowPlanDialog(open);
       }}>
-        <DialogContent>
+          <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingPlan ? 'Edit Membership Plan' : 'Create Membership Plan'}</DialogTitle>
             <DialogDescription>
@@ -406,7 +433,7 @@ export default function MembershipsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Category *</Label>
-                <Select defaultValue={editingPlan?.gender || 'UNISEX'} onValueChange={(val) => setValue('gender', val as PlanFormValues['gender'])}>
+                <Select defaultValue={editingPlan?.gender || 'UNISEX'} onValueChange={(val) => { setPlanGender(val); setValue('gender', val as PlanFormValues['gender']); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="UNISEX">Unisex</SelectItem>
@@ -450,7 +477,14 @@ export default function MembershipsPage() {
               <Label>Description</Label>
               <Textarea placeholder="What does this plan include?" {...register('description')} />
             </div>
-            <div className="flex justify-end gap-3 pt-4">
+            {planGender === 'FEMALE' && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between"><Label>Activities / Classes</Label><Button type="button" size="sm" variant="outline" onClick={() => setActivities((items) => [...items, { name: '', price: '' }])}>+ Add exercise</Button></div>
+                {activities.map((activity, index) => <div className="flex gap-2" key={index}><Input placeholder="Yoga" value={activity.name} onChange={(event) => setActivities((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /><Input className="w-28" type="number" min="0" placeholder="Price" value={activity.price} onChange={(event) => setActivities((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, price: event.target.value } : item))} /><Button type="button" variant="ghost" onClick={() => setActivities((items) => items.filter((_, itemIndex) => itemIndex !== index))}>Remove</Button></div>)}
+                {activities.length === 0 && <p className="text-xs text-slate-500">Use “+ Add exercise” to add Yoga, Pilates, etc. with a price.</p>}
+              </div>
+            )}
+            <div className="sticky bottom-0 flex flex-col-reverse gap-2 bg-background pt-4 sm:flex-row sm:justify-end">
               <Button type="button" variant="outline" onClick={closePlanDialog}>Cancel</Button>
               <Button type="submit" disabled={isMutating} className="bg-cyan-600 hover:bg-cyan-500">
                 {isMutating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}

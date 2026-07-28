@@ -43,6 +43,7 @@ export class MembersService {
         ...memberData,
         memberId,
         joiningDate: joiningDate ? new Date(joiningDate) : new Date(),
+        status: planId ? 'INACTIVE' : 'ACTIVE',
       },
     });
 
@@ -69,6 +70,10 @@ export class MembersService {
 
     if (filter.gender) {
       where.gender = filter.gender;
+    }
+
+    if (filter.timeSlot) {
+      where.timeSlot = filter.timeSlot;
     }
 
     if (filter.search) {

@@ -27,26 +27,8 @@ import {
 } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
 import { formatCurrency } from '@gms/utils';
+import { api } from '@/lib/api/axios';
 
-const memberGrowthData = [
-  { month: 'Jan', members: 280 },
-  { month: 'Feb', members: 295 },
-  { month: 'Mar', members: 305 },
-  { month: 'Apr', members: 312 },
-  { month: 'May', members: 325 },
-  { month: 'Jun', members: 338 },
-  { month: 'Jul', members: 342 },
-];
-
-const retentionData = [
-  { month: 'Jan', rate: 92 },
-  { month: 'Feb', rate: 89 },
-  { month: 'Mar', rate: 94 },
-  { month: 'Apr', rate: 91 },
-  { month: 'May', rate: 88 },
-  { month: 'Jun', rate: 93 },
-  { month: 'Jul', rate: 90 },
-];
 
 export default function ReportsPage() {
   const { data: statsData, isLoading } = useQuery({
@@ -211,7 +193,7 @@ export default function ReportsPage() {
           <CardContent>
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={retentionData}>
+                <LineChart data={stats.memberGrowth || []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="month" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} domain={[80, 100]} tickFormatter={(v) => `${v}%`} />
@@ -219,7 +201,7 @@ export default function ReportsPage() {
                     contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px', color: '#e2e8f0' }}
                     formatter={(value: number) => [`${value}%`, 'Retention']}
                   />
-                  <Line type="monotone" dataKey="rate" stroke="#f59e0b" strokeWidth={2} dot={{ fill: '#f59e0b', r: 4 }} />
+                  <Line type="monotone" dataKey="members" stroke="#f59e0b" strokeWidth={2} dot={{ fill: '#f59e0b', r: 4 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
