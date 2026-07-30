@@ -1,0 +1,690 @@
+'use client';
+
+import { useState } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Edit2, Mail, Phone, MapPin, Calendar, CreditCard, Shield, Loader2, Clock } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { toast } from '@/components/ui/use-toast';
+import { api } from '@/lib/api/axios';
+import { formatDate, formatDateTime, formatCurrency, formatPhone, formatDuration } from '@gms/utils';
+import { MemberStatus, MembershipStatus, PaymentStatus } from '@gms/types';
+
+export default function MemberDetailPage() {
+  const params = useParams();
+  const memberId = params.id as string;
+  const queryClient = useQueryClient();
+
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState('');
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [includeAdmissionFee, setIncludeAdmissionFee] = useState(false);
+
+  const { data: memberData, isLoading: isLoadingMember } = useQuery({
+    queryKey: ['member', memberId],
+    queryFn: async () => {
+      const res = await api.get(`/members/${memberId}`);
+      return res.data;
+    },
+  });
+
+  const member = memberData?.data;
+  const memberships = member?.memberships || [];
+
+  const { data: plansData } = useQuery({
+    queryKey: ['membership-plans'],
+    queryFn: async () => {
+      const res = await api.get('/memberships/plans');
+      return res.data;
+    },
+  });
+  const plans = (plansData?.data || []).filter((plan: any) => plan.isActive);
+
+  const { data: attendanceData } = useQuery({
+    queryKey: ['attendance', 'member', memberId],
+    queryFn: async () => {
+      const res = await api.get(`/attendance/member/${memberId}?take=30`);
+      return res.data;
+    },
+  });
+  const attendance = Array.isArray(attendanceData) ? attendanceData : (attendanceData?.data || []);
+
+  const { data: paymentsData } = useQuery({
+    queryKey: ['payments'],
+    queryFn: async () => {
+      const res = await api.get('/payments');
+      return res.data;
+    },
+  });
+  const payments = (paymentsData?.data || []).filter((p: any) => p.memberId === memberId);
+
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: async () => {
+      const res = await api.get('/settings');
+      return res.data;
+    },
+  });
+  const settingsArray = settingsData?.data || [];
+  const getSetting = (key: string) => settingsArray.find((s: any) => s.key === key)?.value || '';
+
+  const handleAssignPlan = async () => {
+    if (!selectedPlanId) {
+      toast({ title: 'Error', description: 'Please select a plan.', variant: 'destructive' });
+      return;
+    }
+    setIsAssigning(true);
+    try {
+      await api.post('/memberships', {
+        memberId,
+        planId: selectedPlanId,
+        startDate: startDate || undefined,
+        includeAdmissionFee,
+      });
+      toast({
+        title: 'Plan Assigned',
+        description: 'Membership plan has been assigned successfully.',
+        variant: 'success',
+      });
+      queryClient.invalidateQueries({ queryKey: ['member', memberId] });
+      queryClient.invalidateQueries({ queryKey: ['memberships'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      setShowAssignDialog(false);
+      setSelectedPlanId('');
+      setIncludeAdmissionFee(false);
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.response?.data?.message || 'Failed to assign plan.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
+  const markPaymentPaid = async (paymentId: string) => {
+    try {
+      await api.patch(`/payments/${paymentId}`, { paymentStatus: 'PAID' });
+      toast({ title: 'Payment Updated', description: 'Payment has been marked as paid.', variant: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['member', memberId] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.response?.data?.message || 'Unable to update payment.', variant: 'destructive' });
+    }
+  };
+
+  const printInvoice = (payment: any) => {
+    const gymName = getSetting('GYM_NAME') || 'GMS Fitness';
+    const gymAddress = getSetting('GYM_ADDRESS') || '123 Fitness Street, Gym City';
+    const gymPhone = getSetting('GYM_PHONE') || '+1 234 567 890';
+    const gymEmail = getSetting('GYM_EMAIL') || 'contact@gmsfitness.com';
+
+    const status = payment.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID';
+    const popup = window.open('', '_blank');
+    if (!popup) return;
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Invoice - ${payment.invoiceNumber}</title>
+        <style>
+          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
+          .invoice-box { max-width: 800px; margin: auto; padding: 30px; border: 1px solid #e2e8f0; box-shadow: 0 0 10px rgba(0, 0, 0, 0.05); }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #06b6d4; padding-bottom: 20px; }
+          .brand h1 { margin: 0; color: #06b6d4; font-size: 28px; text-transform: uppercase; letter-spacing: 1px; }
+          .brand p { margin: 5px 0 0; color: #64748b; font-size: 14px; }
+          .details { text-align: right; }
+          .details h2 { margin: 0; color: #334155; font-size: 24px; text-transform: uppercase; }
+          .details p { margin: 5px 0; color: #64748b; font-size: 14px; }
+          .status { display: inline-block; padding: 4px 12px; border-radius: 9999px; font-weight: 600; font-size: 12px; margin-top: 10px; }
+          .status.paid { background-color: #d1fae5; color: #059669; }
+          .status.unpaid { background-color: #fee2e2; color: #dc2626; }
+          .info-section { display: flex; justify-content: space-between; margin-bottom: 40px; }
+          .bill-to h3 { margin: 0 0 10px; color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+          .bill-to p { margin: 0 0 5px; font-size: 14px; font-weight: 500; }
+          .table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+          .table th { padding: 12px; border-bottom: 2px solid #cbd5e1; text-align: left; font-size: 12px; text-transform: uppercase; color: #64748b; }
+          .table td { padding: 12px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
+          .table td.amount { text-align: right; font-family: monospace; font-size: 15px; }
+          .table th.amount { text-align: right; }
+          .summary { width: 300px; margin-left: auto; margin-bottom: 40px; }
+          .summary-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+          .summary-row.total { font-weight: bold; font-size: 18px; border-bottom: none; border-top: 2px solid #334155; margin-top: 10px; padding-top: 15px; }
+          .summary-row .amount { font-family: monospace; }
+          .footer { text-align: center; color: #94a3b8; font-size: 12px; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+          @media print {
+            body { padding: 0; }
+            .invoice-box { box-shadow: none; border: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="invoice-box">
+          <div class="header">
+            <div class="brand">
+              <h1>${gymName}</h1>
+              <p>${gymAddress}</p>
+              <p>${gymPhone} | ${gymEmail}</p>
+            </div>
+            <div class="details">
+              <h2>INVOICE</h2>
+              <p># ${payment.invoiceNumber}</p>
+              <p>Date: ${new Date(payment.createdAt).toLocaleDateString()}</p>
+              <div class="status ${status.toLowerCase()}">${status}</div>
+            </div>
+          </div>
+          
+          <div class="info-section">
+            <div class="bill-to">
+              <h3>Billed To</h3>
+              <p>${member.firstName} ${member.lastName}</p>
+              <p>Member ID: ${member.memberId}</p>
+              <p>Phone: ${member.phone}</p>
+              <p>CNIC: ${member.cnic || 'N/A'}</p>
+            </div>
+            <div class="bill-to" style="text-align: right;">
+              <h3>Payment Method</h3>
+              <p>${payment.paymentMethod || 'N/A'}</p>
+              ${payment.paidAt ? `<p>Paid on: ${new Date(payment.paidAt).toLocaleDateString()}</p>` : ''}
+            </div>
+          </div>
+
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th class="amount">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Membership Fee (${payment.membership?.plan?.name || 'Plan'})</td>
+                <td class="amount">${formatCurrency(payment.totalAmount - (payment.admissionFee || 0))}</td>
+              </tr>
+              ${payment.admissionFee > 0 ? `
+              <tr>
+                <td>Admission Fee</td>
+                <td class="amount">${formatCurrency(payment.admissionFee)}</td>
+              </tr>
+              ` : ''}
+            </tbody>
+          </table>
+
+          <div class="summary">
+            <div class="summary-row">
+              <span>Subtotal</span>
+              <span class="amount">${formatCurrency(payment.totalAmount)}</span>
+            </div>
+            <div class="summary-row" style="color: #059669;">
+              <span>Amount Paid</span>
+              <span class="amount">${formatCurrency(payment.paidAmount)}</span>
+            </div>
+            <div class="summary-row total">
+              <span>Balance Due</span>
+              <span class="amount">${formatCurrency(payment.remainingDue)}</span>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p>Thank you for choosing ${gymName}!</p>
+            <p>Generated on ${new Date().toLocaleString()}</p>
+          </div>
+        </div>
+        <script>
+          window.onload = function() { window.print(); }
+        </script>
+      </body>
+      </html>
+    `;
+    
+    popup.document.write(html);
+    popup.document.close();
+  };
+
+  const getStatusBadge = (status: MemberStatus) => {
+    switch (status) {
+      case 'ACTIVE': return <Badge variant="success">Active</Badge>;
+      case 'INACTIVE': return <Badge variant="secondary">Inactive</Badge>;
+      case 'INACTIVE': return <Badge variant="secondary">Inactive</Badge>;
+      case 'SUSPENDED': return <Badge variant="warning">Suspended</Badge>;
+      case 'DELETED': return <Badge variant="destructive">Deleted</Badge>;
+      default: return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const getMembershipStatusBadge = (status: MembershipStatus) => {
+    switch (status) {
+      case 'ACTIVE': return <Badge variant="success">Active</Badge>;
+      case 'EXPIRED': return <Badge variant="secondary">Expired</Badge>;
+      case 'FROZEN': return <Badge className="border-transparent bg-blue-500/15 text-blue-500">Frozen</Badge>;
+      case 'SUSPENDED': return <Badge variant="warning">Suspended</Badge>;
+      case 'CANCELLED': return <Badge variant="destructive">Cancelled</Badge>;
+      default: return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const getPaymentStatusBadge = (status: PaymentStatus) => {
+    switch (status) {
+      case 'PAID': return <Badge variant="success">Paid</Badge>;
+      case 'PARTIAL': return <Badge variant="warning">Partial</Badge>;
+      case 'PENDING': return <Badge className="border-transparent bg-amber-500/15 text-amber-500">Pending</Badge>;
+      case 'REFUNDED': return <Badge variant="secondary">Refunded</Badge>;
+      default: return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  if (isLoadingMember) {
+    return <div className="text-white">Loading member details...</div>;
+  }
+
+  if (!member) {
+    return <div className="text-white">Member not found.</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/members">
+            <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div className="flex items-center gap-4">
+            <Avatar className="h-14 w-14">
+              <AvatarFallback className="text-lg">
+                {member.firstName[0]}{member.lastName[0]}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold tracking-tight text-white">
+                  {member.firstName} {member.lastName}
+                </h1>
+                {getStatusBadge(member.status)}
+              </div>
+              <p className="text-sm text-slate-400">{member.memberId} • Joined {formatDate(member.joiningDate)}</p>
+            </div>
+          </div>
+        </div>
+        <Link href={`/members/${memberId}/edit`}>
+          <Button className="bg-cyan-600 text-white hover:bg-cyan-500">
+            <Edit2 className="mr-2 h-4 w-4" /> Edit Member
+          </Button>
+        </Link>
+      </div>
+
+      <Tabs defaultValue="profile" className="space-y-6">
+        <TabsList className="bg-slate-800/50">
+          <TabsTrigger value="profile">Profile</TabsTrigger>
+          <TabsTrigger value="membership">Membership</TabsTrigger>
+          <TabsTrigger value="attendance">Attendance</TabsTrigger>
+          <TabsTrigger value="payments">Payments</TabsTrigger>
+        </TabsList>
+
+        {/* Profile Tab */}
+        <TabsContent value="profile">
+          <div className="grid gap-6 lg:grid-cols-3">
+            <Card className="border-slate-800 bg-slate-900/50 lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="text-white">Personal Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <InfoField label="Full Name" value={`${member.firstName} ${member.lastName}`} />
+                  <InfoField label="Father's Name" value={member.fatherName || 'N/A'} />
+                  <InfoField label="Gender" value={member.gender} />
+                  <InfoField label="Date of Birth" value={member.dateOfBirth ? formatDate(member.dateOfBirth) : 'N/A'} />
+                  <InfoField label="CNIC" value={member.cnic || 'N/A'} />
+                  <InfoField label="Member ID" value={member.memberId} />
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-6">
+              <Card className="border-slate-800 bg-slate-900/50">
+                <CardHeader>
+                  <CardTitle className="text-white">Contact</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center gap-3 text-sm">
+                    <Phone className="h-4 w-4 text-slate-500" />
+                    <span className="text-slate-300">{formatPhone(member.phone)}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <Mail className="h-4 w-4 text-slate-500" />
+                    <span className="text-slate-300">{member.email || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-start gap-3 text-sm">
+                    <MapPin className="h-4 w-4 text-slate-500 mt-0.5" />
+                    <span className="text-slate-300">{member.address || 'N/A'}</span>
+                  </div>
+                  <Separator className="bg-slate-800" />
+                  <div className="flex items-center gap-3 text-sm">
+                    <Shield className="h-4 w-4 text-slate-500" />
+                    <span className="text-slate-400">Emergency:</span>
+                    <span className="text-slate-300">{member.emergencyContact ? formatPhone(member.emergencyContact) : 'N/A'}</span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {member.notes && (
+                <Card className="border-slate-800 bg-slate-900/50">
+                  <CardHeader>
+                    <CardTitle className="text-white">Notes</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-slate-400">{member.notes}</p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Membership Tab */}
+        <TabsContent value="membership">
+          <Card className="border-slate-800 bg-slate-900/50">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-white">Membership History</CardTitle>
+              <Button
+                className="bg-cyan-600 text-white hover:bg-cyan-500"
+                size="sm"
+                onClick={() => setShowAssignDialog(true)}
+              >
+                <CreditCard className="mr-2 h-4 w-4" /> Assign Plan
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {memberships.length === 0 ? (
+                <div className="py-8 text-center text-slate-500">No memberships assigned yet.</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Plan</TableHead>
+                      <TableHead>Start Date</TableHead>
+                      <TableHead>End Date</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Payment</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {memberships.map((ms: any) => (
+                      <TableRow key={ms.id}>
+                        <TableCell className="text-white font-medium">{ms.plan?.name || 'N/A'}</TableCell>
+                        <TableCell className="text-slate-300">{formatDate(ms.startDate)}</TableCell>
+                        <TableCell className="text-slate-300">{formatDate(ms.endDate)}</TableCell>
+                        <TableCell>{getMembershipStatusBadge(ms.status)}</TableCell>
+                        <TableCell>
+                          {ms.payments?.some((payment: any) => payment.paymentStatus === 'PAID') ? (
+                            <Badge variant="success">Paid</Badge>
+                          ) : ms.status === 'EXPIRED' ? (
+                            <Badge variant="destructive">Unpaid</Badge>
+                          ) : (
+                            <Badge variant="outline">Not due</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {ms.status === 'ACTIVE' ? (
+                            <Button size="sm" variant="outline" onClick={async () => {
+                              try { await api.patch(`/memberships/${ms.id}`, { status: 'INACTIVE' }); queryClient.invalidateQueries({ queryKey: ['member', memberId] }); toast({ title: 'Membership Inactivated', description: 'You can now assign a different plan.', variant: 'success' }); }
+                              catch (err: any) { toast({ title: 'Error', description: err.response?.data?.message || 'Unable to update membership.', variant: 'destructive' }); }
+                            }}>Inactivate</Button>
+                          ) : (
+                            <Button size="sm" onClick={() => toast({ title: 'Payment required', description: 'Mark the pending voucher paid from the Payments tab to activate this membership.', variant: 'destructive' })}>Activate</Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Attendance Tab */}
+        <TabsContent value="attendance">
+          <Card className="border-slate-800 bg-slate-900/50">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-cyan-500" />
+                  Attendance History
+                </CardTitle>
+                <Badge variant="outline" className="border-slate-700 text-slate-400">
+                  {attendance.length} records
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {attendance.length === 0 ? (
+                <div className="py-12 text-center">
+                  <Clock className="h-10 w-10 text-slate-700 mx-auto mb-3" />
+                  <p className="text-slate-500 text-sm">No attendance records yet.</p>
+                  <p className="text-slate-600 text-xs mt-1">Records appear after the member scans at the ZKTeco device.</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Check In</TableHead>
+                      <TableHead>Check Out</TableHead>
+                      <TableHead>Duration</TableHead>
+                      <TableHead>Device</TableHead>
+                      <TableHead>Source</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {attendance.map((log: any) => (
+                      <TableRow key={log.id}>
+                        <TableCell className="text-white">{formatDate(log.checkIn)}</TableCell>
+                        <TableCell className="text-emerald-400 font-mono text-sm">
+                          {new Date(log.checkIn).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                        </TableCell>
+                        <TableCell className="text-blue-400 font-mono text-sm">
+                          {log.checkOut
+                            ? new Date(log.checkOut).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+                            : <span className="text-slate-600">—</span>}
+                        </TableCell>
+                        <TableCell className="text-slate-300">{log.duration ? formatDuration(log.duration) : '—'}</TableCell>
+                        <TableCell className="text-slate-400 text-xs">{log.device?.name ?? '—'}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={
+                              log.source === 'DEVICE'
+                                ? 'bg-cyan-500/15 text-cyan-400 border-transparent'
+                                : 'bg-slate-700/30 text-slate-400 border-transparent'
+                            }
+                          >
+                            {log.source}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Payments Tab */}
+        <TabsContent value="payments">
+          <Card className="border-slate-800 bg-slate-900/50">
+            <CardHeader>
+              <CardTitle className="text-white">Payment History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {payments.length === 0 ? (
+                <div className="py-8 text-center text-slate-500">No payment records found.</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Paid</TableHead>
+                      <TableHead>Due</TableHead>
+                      <TableHead>Method</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {payments.map((payment: any) => (
+                      <TableRow key={payment.id}>
+                        <TableCell className="text-white font-mono text-xs">{payment.invoiceNumber}</TableCell>
+                        <TableCell className="text-slate-300">{formatCurrency(payment.totalAmount)}</TableCell>
+                        <TableCell className="text-emerald-400">{formatCurrency(payment.paidAmount)}</TableCell>
+                        <TableCell className={payment.remainingDue > 0 ? 'text-rose-400' : 'text-slate-500'}>
+                          {formatCurrency(payment.remainingDue)}
+                        </TableCell>
+                        <TableCell className="text-slate-300">{payment.paymentMethod}</TableCell>
+                        <TableCell>{getPaymentStatusBadge(payment.paymentStatus)}</TableCell>
+                        <TableCell className="text-slate-300">{formatDate(payment.paidAt)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button size="sm" variant="outline" className="mr-2" onClick={() => printInvoice(payment)}>Invoice</Button>
+                          {payment.paymentStatus !== 'PAID' && payment.paymentStatus !== 'REFUNDED' && (
+                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500" onClick={() => markPaymentPaid(payment.id)}>
+                              Mark Paid
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Assign Plan Dialog */}
+      <Dialog open={showAssignDialog} onOpenChange={(open) => {
+        setShowAssignDialog(open);
+        if (!open) {
+          setSelectedPlanId('');
+          setStartDate(new Date().toISOString().split('T')[0]);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Membership Plan</DialogTitle>
+            <DialogDescription>
+              Select a plan to assign to {member.firstName} {member.lastName}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label>Membership Plan *</Label>
+              <Select onValueChange={setSelectedPlanId} value={selectedPlanId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {plans.map((plan: any) => (
+                    <SelectItem key={plan.id} value={plan.id}>
+                      {plan.name} — {formatCurrency(plan.price)} / {plan.durationDays} days
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Start Date</Label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={includeAdmissionFee}
+                onChange={(event) => setIncludeAdmissionFee(event.target.checked)}
+              />
+              Apply the plan&apos;s admission fee
+            </label>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button type="button" variant="outline" onClick={() => setShowAssignDialog(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleAssignPlan}
+                disabled={isAssigning || !selectedPlanId}
+                className="bg-cyan-600 hover:bg-cyan-500"
+              >
+                {isAssigning ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Assigning...
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Assign Plan
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function InfoField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-slate-500 mb-1">{label}</p>
+      <p className="text-sm text-white">{value}</p>
+    </div>
+  );
+}

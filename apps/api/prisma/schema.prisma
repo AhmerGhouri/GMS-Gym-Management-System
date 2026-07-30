@@ -1,0 +1,429 @@
+// ============================================
+// GMS — Gym Management System
+// Prisma Schema
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  SUPER_ADMIN
+  GYM_MANAGER
+  RECEPTIONIST
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum MemberStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+  FROZEN
+  SUSPENDED
+  CANCELLED
+}
+
+enum PlanDuration {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  YEARLY
+}
+
+enum PlanGender {
+  MALE
+  FEMALE
+  UNISEX
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK
+  ONLINE
+}
+
+enum PaymentStatus {
+  PAID
+  PARTIAL
+  PENDING
+  REFUNDED
+}
+
+enum DeviceConnectionType {
+  ETHERNET
+  WIFI
+}
+
+enum DeviceStatus {
+  ONLINE
+  OFFLINE
+}
+
+enum SyncAction {
+  CREATE_USER
+  UPDATE_USER
+  DELETE_USER
+  ENABLE_USER
+  DISABLE_USER
+  DOWNLOAD_ATTENDANCE
+  SYNC_USERS
+}
+
+enum SyncJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum AccessResult {
+  GRANTED
+  DENIED
+}
+
+enum AccessDenyReason {
+  MEMBERSHIP_EXPIRED
+  MEMBERSHIP_SUSPENDED
+  MEMBERSHIP_FROZEN
+  UNKNOWN_USER
+  DEVICE_OFFLINE
+  MANUAL_BLOCK
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  MEMBER_CREATED
+  MEMBER_UPDATED
+  MEMBER_DELETED
+  MEMBERSHIP_ASSIGNED
+  MEMBERSHIP_RENEWED
+  MEMBERSHIP_FROZEN
+  MEMBERSHIP_SUSPENDED
+  MEMBERSHIP_EXPIRED
+  PAYMENT_RECEIVED
+  ACCESS_DISABLED
+  ACCESS_ENABLED
+  DEVICE_ADDED
+  DEVICE_REMOVED
+  SETTINGS_UPDATED
+  BACKUP_CREATED
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+/// System users (admins, managers, receptionists)
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  password     String
+  firstName    String    @map("first_name")
+  lastName     String    @map("last_name")
+  role         UserRole
+  customRoleId String?   @map("custom_role_id")
+  isActive     Boolean   @default(true) @map("is_active")
+  refreshToken String?   @map("refresh_token")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  auditLogs AuditLog[]
+  customRole CustomRole? @relation(fields: [customRoleId], references: [id])
+
+  @@map("users")
+}
+
+model CustomRole {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  permissions Json
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  users       User[]
+  @@map("custom_roles")
+}
+
+/// Gym members (customers)
+model Member {
+  id               String       @id @default(uuid())
+  memberId         String       @unique @map("member_id")
+  firstName        String       @map("first_name")
+  lastName         String       @map("last_name")
+  fatherName       String?      @map("father_name")
+  gender           Gender
+  dateOfBirth      DateTime?    @map("date_of_birth")
+  phone            String
+  email            String?
+  cnic             String?      @unique
+  address          String?
+  emergencyContact String?      @map("emergency_contact")
+  photoUrl         String?      @map("photo_url")
+  status           MemberStatus @default(ACTIVE)
+  joiningDate      DateTime     @default(now()) @map("joining_date")
+  notes            String?
+  timeSlot         String?      @map("time_slot")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  memberships    Membership[]
+  payments       Payment[]
+  attendanceLogs AttendanceLog[]
+  gateAccessLogs GateAccessLog[]
+  syncJobs       SyncJob[]
+
+  @@index([memberId])
+  @@index([phone])
+  @@index([cnic])
+  @@index([status])
+  @@map("members")
+}
+
+/// Membership plans (Daily, Weekly, Monthly, etc.)
+model MembershipPlan {
+  id           String       @id @default(uuid())
+  name         String
+  duration     PlanDuration
+  gender       PlanGender   @default(UNISEX)
+  durationDays Int          @map("duration_days")
+  price        Decimal      @db.Decimal(10, 2)
+  admissionFee Decimal      @default(0) @map("admission_fee") @db.Decimal(10, 2)
+  activities   Json?        @map("activities")
+  description  String?
+  isActive     Boolean      @default(true) @map("is_active")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  memberships Membership[]
+
+  @@map("membership_plans")
+}
+
+/// Member's membership instance
+model Membership {
+  id             String           @id @default(uuid())
+  memberId       String           @map("member_id")
+  planId         String           @map("plan_id")
+  planPrice      Decimal          @map("plan_price") @db.Decimal(10, 2)
+  admissionFee   Decimal          @default(0) @map("admission_fee") @db.Decimal(10, 2)
+  startDate      DateTime         @map("start_date")
+  endDate        DateTime         @map("end_date")
+  status         MembershipStatus @default(ACTIVE)
+  frozenAt       DateTime?        @map("frozen_at")
+  frozenUntil    DateTime?        @map("frozen_until")
+  frozenDaysUsed Int              @default(0) @map("frozen_days_used")
+  notes          String?
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  member   Member         @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  plan     MembershipPlan @relation(fields: [planId], references: [id])
+  payments Payment[]
+
+  @@index([memberId])
+  @@index([status])
+  @@index([endDate])
+  @@map("memberships")
+}
+
+/// Payment records
+model Payment {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique @map("invoice_number")
+  memberId      String        @map("member_id")
+  membershipId  String?       @map("membership_id")
+  amount        Decimal       @db.Decimal(10, 2)
+  discount      Decimal       @default(0) @db.Decimal(10, 2)
+  totalAmount   Decimal       @map("total_amount") @db.Decimal(10, 2)
+  paidAmount    Decimal       @map("paid_amount") @db.Decimal(10, 2)
+  remainingDue  Decimal       @default(0) @map("remaining_due") @db.Decimal(10, 2)
+  paymentMethod PaymentMethod @map("payment_method")
+  paymentStatus PaymentStatus @map("payment_status")
+  notes         String?
+  receiptUrl    String?       @map("receipt_url")
+  paidAt        DateTime      @default(now()) @map("paid_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  member     Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  membership Membership? @relation(fields: [membershipId], references: [id])
+
+  @@index([memberId])
+  @@index([invoiceNumber])
+  @@index([paidAt])
+  @@map("payments")
+}
+
+/// Attendance check-in/out records
+model AttendanceLog {
+  id       String    @id @default(uuid())
+  memberId String    @map("member_id")
+  checkIn  DateTime  @map("check_in")
+  checkOut DateTime? @map("check_out")
+  duration Int?      // Duration in minutes
+  source   String    @default("DEVICE") // DEVICE, MANUAL
+  deviceId String?   @map("device_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  member Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  device Device? @relation(fields: [deviceId], references: [id])
+
+  @@index([memberId])
+  @@index([checkIn])
+  @@map("attendance_logs")
+}
+
+/// Gate access attempt logs
+model GateAccessLog {
+  id         String            @id @default(uuid())
+  memberId   String?           @map("member_id")
+  deviceId   String?           @map("device_id")
+  result     AccessResult
+  denyReason AccessDenyReason? @map("deny_reason")
+  timestamp  DateTime          @default(now())
+  rawData    Json?             @map("raw_data")
+
+  member Member? @relation(fields: [memberId], references: [id])
+  device Device? @relation(fields: [deviceId], references: [id])
+
+  @@index([memberId])
+  @@index([timestamp])
+  @@index([result])
+  @@map("gate_access_logs")
+}
+
+/// Biometric devices (ZKTeco)
+model Device {
+  id             String               @id @default(uuid())
+  name           String
+  ipAddress      String               @map("ip_address")
+  port           Int                  @default(4370)
+  connectionType DeviceConnectionType @map("connection_type")
+  status         DeviceStatus         @default(OFFLINE)
+  serialNumber   String?              @map("serial_number")
+  lastSyncAt     DateTime?            @map("last_sync_at")
+  isActive       Boolean              @default(true) @map("is_active")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  attendanceLogs AttendanceLog[]
+  gateAccessLogs GateAccessLog[]
+  syncJobs       SyncJob[]
+
+  @@map("devices")
+}
+
+/// Device sync job queue
+model SyncJob {
+  id          String        @id @default(uuid())
+  deviceId    String        @map("device_id")
+  memberId    String?       @map("member_id")
+  action      SyncAction
+  status      SyncJobStatus @default(PENDING)
+  payload     Json?
+  result      Json?
+  retryCount  Int           @default(0) @map("retry_count")
+  maxRetries  Int           @default(3) @map("max_retries")
+  error       String?
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  completedAt DateTime?     @map("completed_at")
+
+  device Device  @relation(fields: [deviceId], references: [id])
+  member Member? @relation(fields: [memberId], references: [id])
+
+  @@index([status])
+  @@index([deviceId])
+  @@map("sync_jobs")
+}
+
+/// In-app notifications
+model Notification {
+  id        String   @id @default(uuid())
+  title     String
+  message   String
+  type      String   // MEMBERSHIP_EXPIRY, PAYMENT_DUE, SYSTEM
+  isRead    Boolean  @default(false) @map("is_read")
+  userId    String?  @map("user_id")
+  memberId  String?  @map("member_id")
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+/// Email sending logs
+model EmailLog {
+  id        String    @id @default(uuid())
+  to        String
+  subject   String
+  template  String
+  status    String    // SENT, FAILED, PENDING
+  error     String?
+  sentAt    DateTime? @map("sent_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("email_logs")
+}
+
+/// Audit trail for important actions
+model AuditLog {
+  id        String      @id @default(uuid())
+  userId    String?     @map("user_id")
+  action    AuditAction
+  entity    String      // Table name affected
+  entityId  String?     @map("entity_id")
+  oldValues Json?       @map("old_values")
+  newValues Json?       @map("new_values")
+  ipAddress String?     @map("ip_address")
+  userAgent String?     @map("user_agent")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+/// System settings (key-value store)
+model Setting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       Json
+  group       String   // GYM_INFO, SMTP, DEVICE, BACKUP, THEME, GENERAL
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([group])
+  @@map("settings")
+}

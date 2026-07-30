@@ -1,0 +1,24 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../core/database/prisma.service';
+import * as bcrypt from 'bcrypt';
+import { UserRole } from '@prisma/client';
+
+@Injectable()
+export class UsersService {
+  constructor(private readonly prisma: PrismaService) {}
+  list() { return this.prisma.user.findMany({ select: { id: true, email: true, firstName: true, lastName: true, role: true, customRoleId: true, customRole: true, isActive: true, createdAt: true }, orderBy: { createdAt: 'desc' } }); }
+  async get(id: string) { const user = await this.prisma.user.findUnique({ where: { id }, select: { id: true, email: true, firstName: true, lastName: true, role: true, isActive: true } }); if (!user) throw new NotFoundException('User not found'); return user; }
+  async create(data: { email: string; firstName: string; lastName: string; password: string; role: UserRole }) {
+    const existing = await this.prisma.user.findUnique({ where: { email: data.email } });
+    if (existing) throw new BadRequestException('A user with this email already exists');
+    return this.prisma.user.create({ data: { ...data, password: await bcrypt.hash(data.password, 12) }, select: { id: true, email: true, firstName: true, lastName: true, role: true, isActive: true } });
+  }
+  async update(id: string, data: Partial<{ firstName: string; lastName: string; role: UserRole; isActive: boolean; password: string }>) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+    const update: any = { ...data };
+    if (data.password) update.password = await bcrypt.hash(data.password, 12);
+    return this.prisma.user.update({ where: { id }, data: update, select: { id: true, email: true, firstName: true, lastName: true, role: true, isActive: true } });
+  }
+  async remove(id: string) { await this.prisma.user.update({ where: { id }, data: { isActive: false, refreshToken: null } }); return { message: 'User deactivated' }; }
+}
