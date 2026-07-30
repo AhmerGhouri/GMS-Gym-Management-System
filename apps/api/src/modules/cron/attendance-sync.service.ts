@@ -10,9 +10,10 @@ export class AttendanceSyncService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly zkteco: ZktecoService,
-  ) {}
+  ) { }
 
-  @Cron('*/15 * * * *')
+
+  @Cron('*/60 * * * *')
   async syncAttendanceLogs() {
     this.logger.log('Running periodic attendance sync...');
     const devices = await this.prisma.device.findMany({ where: { isActive: true } });
@@ -22,7 +23,7 @@ export class AttendanceSyncService {
         const logs = await this.zkteco.getAttendances(device.id);
         if (logs.length > 0) {
           this.logger.log(`Found ${logs.length} logs for device ${device.name}`);
-          
+
           for (const log of logs) {
             // Reconstruct memberId (e.g. '1' -> 'GMS-0001')
             const reconstructedMemberId = `GMS-${String(log.user_id).padStart(4, '0')}`;
