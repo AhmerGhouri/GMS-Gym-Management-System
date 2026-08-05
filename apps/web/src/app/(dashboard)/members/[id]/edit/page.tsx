@@ -39,6 +39,7 @@ const memberSchema = z.object({
   notes: z.string().optional(),
   status: z.nativeEnum(MemberStatus).optional(),
   timeSlot: z.string().optional(),
+  activityIds: z.array(z.string()).optional(),
 });
 
 type MemberFormValues = z.infer<typeof memberSchema>;
@@ -55,6 +56,7 @@ export default function EditMemberPage() {
     handleSubmit,
     setValue,
     reset,
+    watch,
     formState: { errors },
   } = useForm<MemberFormValues>({
     resolver: zodResolver(memberSchema),
@@ -73,6 +75,12 @@ export default function EditMemberPage() {
   });
   const { data: slotsData } = useQuery({ queryKey: ['gym-slots'], queryFn: async () => (await api.get('/settings/slots')).data });
   const slots = slotsData?.data || [];
+  const { data: activitiesData } = useQuery({
+    queryKey: ['activities'],
+    queryFn: async () => (await api.get('/activities')).data,
+  });
+  const activities = (Array.isArray(activitiesData) ? activitiesData : activitiesData?.data || []).filter((activity: any) => activity.isActive);
+  const selectedActivityIds = watch('activityIds') || [];
 
   useEffect(() => {
     if (memberData?.data) {
@@ -91,6 +99,7 @@ export default function EditMemberPage() {
         notes: member.notes || '',
         status: member.status,
         timeSlot: member.timeSlot || '',
+        activityIds: member.memberships?.find((membership: any) => membership.status === 'ACTIVE')?.activities?.map((item: any) => item.activityId) || [],
       });
     }
   }, [memberData, reset]);
@@ -241,6 +250,20 @@ export default function EditMemberPage() {
                     <SelectContent>{slots.map((slot: any) => <SelectItem key={slot.id} value={slot.name}>{slot.name} ({slot.start} - {slot.end})</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
+                {activities.length > 0 && (
+                  <div className="space-y-3">
+                    <Label className="text-slate-300">Add-on Activities</Label>
+                    <div className="grid gap-3 sm:grid-cols-2 rounded-lg border border-slate-800 p-4">
+                      {activities.map((activity: any) => (
+                        <label key={activity.id} className="flex items-center gap-3 cursor-pointer text-sm text-slate-300">
+                          <input type="checkbox" value={activity.id} {...register('activityIds')} />
+                          <span>{activity.name} <span className="text-slate-500">(Rs. {activity.price})</span></span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-500">{selectedActivityIds.length} selected. Saving recalculates the membership invoice balance.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

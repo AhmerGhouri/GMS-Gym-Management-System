@@ -26,7 +26,8 @@ export function formatNumber(num: number | string): string {
 /**
  * Format phone number (Pakistan format)
  */
-export function formatPhone(phone: string): string {
+export function formatPhone(phone: string | null | undefined): string {
+  if (!phone) return '';
   const cleaned = phone.replace(/\D/g, '');
   if (cleaned.length === 11 && cleaned.startsWith('0')) {
     return `${cleaned.slice(0, 4)}-${cleaned.slice(4, 11)}`;
@@ -37,7 +38,8 @@ export function formatPhone(phone: string): string {
 /**
  * Format CNIC number
  */
-export function formatCNIC(cnic: string): string {
+export function formatCNIC(cnic: string | null | undefined): string {
+  if (!cnic) return '';
   const cleaned = cnic.replace(/\D/g, '');
   if (cleaned.length === 13) {
     return `${cleaned.slice(0, 5)}-${cleaned.slice(5, 12)}-${cleaned.slice(12)}`;

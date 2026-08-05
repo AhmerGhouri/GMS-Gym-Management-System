@@ -9,9 +9,9 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { MembersService } from './members.service';
-import { CreateMemberDto, UpdateMemberDto, MemberFilterDto } from './dto';
+import { CreateMemberDto, UpdateMemberDto, MemberFilterDto, BulkCreateMemberDto } from './dto';
 import { JwtAuthGuard } from '../../core/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../core/auth/guards/roles.guard';
 import { Roles } from '../../core/auth/decorators/roles.decorator';
@@ -29,6 +29,14 @@ export class MembersController {
   @ApiOperation({ summary: 'Register a new member' })
   create(@Body() createMemberDto: CreateMemberDto) {
     return this.membersService.create(createMemberDto);
+  }
+
+  @Post('bulk')
+  @Roles(UserRole.RECEPTIONIST, UserRole.GYM_MANAGER)
+  @ApiOperation({ summary: 'Register multiple members in bulk' })
+  @ApiBody({ type: BulkCreateMemberDto })
+  bulkCreate(@Body() bulkCreateMemberDto: BulkCreateMemberDto) {
+    return this.membersService.bulkCreate(bulkCreateMemberDto.members);
   }
 
   @Get()

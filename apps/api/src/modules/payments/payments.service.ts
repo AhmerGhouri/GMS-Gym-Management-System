@@ -1,15 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
 import { PaymentStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
-import { ZktecoService } from '../../core/services/zkteco.service';
+import { ZkUserService } from '../device/services/zk-user.service';
 
 @Injectable()
 export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
-    private readonly zkteco: ZktecoService,
+    private readonly zkUser: ZkUserService,
   ) {}
 
   async getPayments() {
@@ -52,14 +52,18 @@ export class PaymentsService {
     }
 
     if (data.paidAmount !== undefined) {
-      updateData.paidAmount = data.paidAmount;
-      updateData.remainingDue = Number(payment.totalAmount) - data.paidAmount;
+      if (data.paidAmount < 0 || data.paidAmount > Number(payment.remainingDue)) {
+        throw new BadRequestException('Payment amount must be between zero and the remaining balance.');
+      }
+      const paidAmount = Number(payment.paidAmount) + data.paidAmount;
+      updateData.paidAmount = paidAmount;
+      updateData.remainingDue = Number(payment.totalAmount) - paidAmount;
 
       // Auto-set status based on paid amount
-      if (data.paidAmount >= Number(payment.totalAmount)) {
+      if (paidAmount >= Number(payment.totalAmount)) {
         updateData.paymentStatus = 'PAID';
         updateData.remainingDue = 0;
-      } else if (data.paidAmount > 0) {
+      } else if (paidAmount > 0) {
         updateData.paymentStatus = 'PARTIAL';
       }
     }
@@ -78,8 +82,8 @@ export class PaymentsService {
       },
     });
 
-    if (updatedPayment.paymentStatus === PaymentStatus.PAID) {
-      // Activate the member and membership
+    if (updatedPayment.paymentStatus === PaymentStatus.PAID || updatedPayment.paymentStatus === PaymentStatus.PARTIAL) {
+      // Membership access stays active; the invoice carries the outstanding-balance state.
       await this.prisma.member.update({
         where: { id: updatedPayment.memberId },
         data: { status: 'ACTIVE' },
@@ -91,45 +95,43 @@ export class PaymentsService {
         });
       }
 
-      await this.notifications.notifyAdmins(
+      if (updatedPayment.paymentStatus === PaymentStatus.PAID) await this.notifications.notifyAdmins(
         'Payment received',
         `Invoice ${updatedPayment.invoiceNumber} was marked paid.`,
         'PAYMENT_RECEIVED',
         updatedPayment.memberId,
       );
 
-      // Provision member on all active ZKTeco devices
-      await this.provisionMemberOnDevices(updatedPayment.member);
+      // Provision member on all active ZKTeco devices using the new ZkUserService
+      await this.zkUser.enqueueEnableOnAllDevices(
+        updatedPayment.member.memberId,
+        `${updatedPayment.member.firstName} ${updatedPayment.member.lastName}`
+      );
+    } else if (updatedPayment.paymentStatus === PaymentStatus.CANCELLED || updatedPayment.paymentStatus === PaymentStatus.REFUNDED) {
+      // Deactivate membership and disable on device
+      if (updatedPayment.membershipId) {
+        await this.prisma.membership.update({
+          where: { id: updatedPayment.membershipId },
+          data: { status: 'INACTIVE' },
+        });
+      }
+      
+      const hasOtherActive = await this.prisma.membership.findFirst({
+        where: {
+          memberId: updatedPayment.memberId,
+          status: 'ACTIVE',
+        },
+      });
+
+      if (!hasOtherActive) {
+        await this.prisma.member.update({
+          where: { id: updatedPayment.memberId },
+          data: { status: 'INACTIVE' },
+        });
+        await this.zkUser.enqueueDisableOnAllDevices(updatedPayment.member.memberId);
+      }
     }
 
     return updatedPayment;
-  }
-
-  /**
-   * Enqueue SyncJobs to add this member to every active device.
-   * The AttendanceSyncService processes these jobs every minute.
-   */
-  private async provisionMemberOnDevices(member: any) {
-    const devices = await this.prisma.device.findMany({ where: { isActive: true } });
-    for (const device of devices) {
-      // Avoid duplicate jobs
-      const existing = await this.prisma.syncJob.findFirst({
-        where: {
-          deviceId: device.id,
-          memberId: member.id,
-          action: 'ENABLE_USER',
-          status: 'PENDING',
-        },
-      });
-      if (!existing) {
-        await this.prisma.syncJob.create({
-          data: {
-            deviceId: device.id,
-            memberId: member.id,
-            action: 'ENABLE_USER',
-          },
-        });
-      }
-    }
   }
 }

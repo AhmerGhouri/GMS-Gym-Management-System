@@ -9,9 +9,19 @@ import {
   MinLength,
   Matches,
   IsBoolean,
+  IsArray,
+  IsNumber,
+  Min,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Gender } from '@prisma/client';
+
+export enum AdmissionFeeType {
+  NONE = 'NONE',
+  FULL = 'FULL',
+  MANUAL = 'MANUAL',
+}
 
 export class CreateMemberDto {
   @ApiProperty({ example: 'Ahmed' })
@@ -56,17 +66,37 @@ export class CreateMemberDto {
   @IsBoolean()
   includeAdmissionFee?: boolean;
 
+
+  @ApiPropertyOptional({ enum: AdmissionFeeType, example: AdmissionFeeType.NONE })
+  @IsOptional()
+  @IsEnum(AdmissionFeeType)
+  admissionFeeType?: AdmissionFeeType;
+
+  @ApiPropertyOptional({ example: 500 })
+  @IsOptional()
+  @Transform(({ value }) => value === '' || value === undefined ? undefined : Number(value))
+  @IsNumber()
+  @Min(0)
+  manualAdmissionFee?: number;
+
   @ApiPropertyOptional({ example: 'Morning' })
   @IsOptional()
   @IsString()
   timeSlot?: string;
 
-  @ApiProperty({ example: '03001234567' })
+  @ApiPropertyOptional({ example: ['uuid-1', 'uuid-2'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  activityIds?: string[];
+
+  @ApiPropertyOptional({ example: '03001234567' })
+  @IsOptional()
+  @Transform(({ value }) => value === '' ? undefined : value)
   @IsString()
-  @IsNotEmpty()
   @MinLength(10)
   @MaxLength(15)
-  phone: string;
+  phone?: string;
 
   @ApiPropertyOptional({ example: 'ahmed@example.com' })
   @IsOptional()
@@ -75,6 +105,7 @@ export class CreateMemberDto {
 
   @ApiPropertyOptional({ example: '3520112345671' })
   @IsOptional()
+  @Transform(({ value }) => value === '' ? undefined : value)
   @IsString()
   @Matches(/^\d{13}$/, { message: 'CNIC must be 13 digits' })
   cnic?: string;

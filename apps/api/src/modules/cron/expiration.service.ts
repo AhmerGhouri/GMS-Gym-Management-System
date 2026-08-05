@@ -2,12 +2,17 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../core/database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ZkUserService } from '../device/services/zk-user.service';
 
 @Injectable()
 export class ExpirationService {
   private readonly logger = new Logger(ExpirationService.name);
 
-  constructor(private readonly prisma: PrismaService, private readonly notifications: NotificationsService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+    private readonly zkUser: ZkUserService,
+  ) {}
 
   // Run at midnight every day
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
@@ -23,6 +28,7 @@ export class ExpirationService {
       },
       include: {
         plan: true,
+        member: { select: { id: true, memberId: true, firstName: true, lastName: true } },
       },
     });
 
@@ -74,22 +80,30 @@ export class ExpirationService {
                 where: { id: membership.memberId },
                 data: { status: 'INACTIVE' },
               });
-
-              // Create SyncJob to remove access from all gate machines
-              const devices = await prisma.device.findMany({ where: { isActive: true } });
-              for (const device of devices) {
-                await prisma.syncJob.create({
-                  data: {
-                    deviceId: device.id,
-                    memberId: membership.memberId,
-                    action: 'DISABLE_USER',
-                  }
-                });
-              }
             }
           });
+
+          // 4. Enqueue DISABLE_USER on all devices via DeviceModule
+          const hasOtherActive = await this.prisma.membership.findFirst({
+            where: {
+              memberId: membership.memberId,
+              status: 'ACTIVE',
+              id: { not: membership.id },
+            },
+          });
+
+          if (!hasOtherActive) {
+            await this.zkUser.enqueueDisableOnAllDevices(membership.member.memberId);
+            this.logger.log(`Enqueued DISABLE_USER for member ${membership.member.memberId}`);
+          }
+
           this.logger.log(`Successfully expired membership ${membership.id} for member ${membership.memberId}`);
-          await this.notifications.notifyAdmins('Membership expired', `A membership expired and an unpaid renewal voucher was created.`, 'MEMBERSHIP_EXPIRY', membership.memberId);
+          await this.notifications.notifyAdmins(
+            'Membership expired',
+            `A membership expired and an unpaid renewal voucher was created.`,
+            'MEMBERSHIP_EXPIRY',
+            membership.memberId,
+          );
         } catch (error) {
           this.logger.error(`Failed to expire membership ${membership.id}: ${(error as Error).message}`);
         }
@@ -97,33 +111,24 @@ export class ExpirationService {
     }
 
     // Also generate PENDING payments for members with recurring unpaid months
-    // Find expired memberships that have no PENDING payment for the current month
     await this.generateMonthlyPendingPayments(now);
   }
 
   /**
    * For expired memberships, keep generating monthly PENDING payment records
    * until admin marks the previous one as PAID.
-   * This runs as part of the daily cron — it checks if we're on the 1st of the month
-   * or if there's no PENDING payment for the current month yet.
    */
   private async generateMonthlyPendingPayments(now: Date) {
     const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-    // Find all EXPIRED memberships
     const expiredMemberships = await this.prisma.membership.findMany({
-      where: {
-        status: 'EXPIRED',
-      },
-      include: {
-        plan: true,
-      },
+      where: { status: 'EXPIRED' },
+      include: { plan: true },
     });
 
     for (const membership of expiredMemberships) {
       try {
-        // Check if a payment already exists for this month for this membership
         const existingMonthlyPayment = await this.prisma.payment.findFirst({
           where: {
             membershipId: membership.id,

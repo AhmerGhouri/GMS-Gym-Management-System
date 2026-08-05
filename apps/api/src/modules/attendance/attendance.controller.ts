@@ -16,17 +16,26 @@ export class AttendanceController {
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
   @ApiQuery({ name: 'take', required: false })
+  @ApiQuery({ name: 'deviceId', required: false })
+  @ApiQuery({ name: 'source', required: false })
+  @ApiQuery({ name: 'search', required: false })
   getAttendanceLogs(
     @Query('memberId') memberId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('take') take?: string,
+    @Query('deviceId') deviceId?: string,
+    @Query('source') source?: string,
+    @Query('search') search?: string,
   ) {
     return this.attendanceService.getAttendanceLogs({
       memberId,
       from,
       to,
       take: take ? parseInt(take, 10) : undefined,
+      deviceId,
+      source,
+      search,
     });
   }
 

@@ -39,7 +39,17 @@ export default function ForgotPasswordPage() {
       await api.post('/auth/forgot-password', data);
       setIsSubmitted(true);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to request reset. Please try again.');
+      let message = 'Failed to request reset. Please try again.';
+      
+      if (err?.response?.data?.message) {
+        const resMessage = err.response.data.message;
+        message = Array.isArray(resMessage) ? resMessage.join(', ') : resMessage;
+      } else if (err?.message) {
+        message = err.message;
+      }
+
+      const isNetworkError = !err?.response && err?.message === 'Network Error';
+      setError(isNetworkError ? 'Unable to connect to server. Please check your connection.' : message);
     } finally {
       setIsLoading(false);
     }

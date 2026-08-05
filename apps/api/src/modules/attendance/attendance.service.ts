@@ -5,9 +5,20 @@ import { PrismaService } from '../../core/database/prisma.service';
 export class AttendanceService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getAttendanceLogs(query?: { memberId?: string; from?: string; to?: string; take?: number }) {
+  async getAttendanceLogs(query?: { memberId?: string; from?: string; to?: string; take?: number; deviceId?: string; source?: string; search?: string; }) {
     const where: any = {};
     if (query?.memberId) where.memberId = query.memberId;
+    if (query?.deviceId) where.deviceId = query.deviceId;
+    if (query?.source) where.source = query.source;
+    if (query?.search) {
+      where.member = {
+        OR: [
+          { firstName: { contains: query.search, mode: 'insensitive' } },
+          { lastName: { contains: query.search, mode: 'insensitive' } },
+          { cnic: { contains: query.search, mode: 'insensitive' } },
+        ]
+      };
+    }
     if (query?.from || query?.to) {
       where.checkIn = {};
       if (query.from) where.checkIn.gte = new Date(query.from);

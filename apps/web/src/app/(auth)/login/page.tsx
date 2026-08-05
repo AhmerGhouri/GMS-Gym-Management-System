@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Dumbbell } from 'lucide-react';
+import { Dumbbell, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,7 +55,17 @@ export default function LoginPage() {
       );
       router.push('/dashboard');
     } catch (err: any) {
-      const message = err?.response?.data?.message || err?.message || 'Failed to login. Please try again.';
+      let message = 'Failed to login. Please try again.';
+      
+      if (err?.response?.data?.message) {
+        const resMessage = err.response.data.message;
+        message = Array.isArray(resMessage) ? resMessage.join(', ') : resMessage;
+      } else if (err?.message) {
+        message = err.message === 'Invalid response from server' 
+          ? 'An unexpected error occurred while communicating with the server. Please try again later.'
+          : err.message;
+      }
+
       const isNetworkError = !err?.response && err?.message === 'Network Error';
       setError(isNetworkError ? 'Unable to connect to server. Please check your connection.' : message);
     } finally {
@@ -123,7 +133,7 @@ export default function LoginPage() {
               className="w-full bg-cyan-600 text-white hover:bg-cyan-500"
               disabled={isLoading}
             >
-              {isLoading ? 'Signing in...' : 'Sign in'}
+              {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in...</> : 'Sign in'}
             </Button>
           </form>
         </CardContent>

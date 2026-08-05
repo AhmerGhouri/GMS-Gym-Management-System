@@ -6,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
-import { CreateMemberDto, UpdateMemberDto, MemberFilterDto } from './dto';
+import { AdmissionFeeType, CreateMemberDto, UpdateMemberDto, MemberFilterDto } from './dto';
 import { PaginatedResult } from '../../common/dto/pagination.dto';
 import { generateMemberId } from '@gms/utils';
 import { Prisma } from '@prisma/client';
@@ -36,14 +36,16 @@ export class MembersService {
     const count = await this.prisma.member.count();
     const memberId = generateMemberId(count + 1);
 
-    const { planId, joiningDate, includeAdmissionFee, ...memberData } = dto;
+    const { planId, joiningDate, includeAdmissionFee, admissionFeeType, manualAdmissionFee, activityIds, ...memberData } = dto;
 
     const member = await this.prisma.member.create({
       data: {
         ...memberData,
+        phone: memberData.phone || undefined,
+        cnic: memberData.cnic || undefined,
         memberId,
         joiningDate: joiningDate ? new Date(joiningDate) : new Date(),
-        status: planId ? 'INACTIVE' : 'ACTIVE',
+        status: planId ? 'ACTIVE' : 'ACTIVE', // Changed to ACTIVE as per requirement 4
       },
     });
 
@@ -52,7 +54,9 @@ export class MembersService {
         member.id,
         planId,
         joiningDate ? new Date(joiningDate) : new Date(),
-        includeAdmissionFee,
+        admissionFeeType === AdmissionFeeType.FULL || (!admissionFeeType && includeAdmissionFee),
+        activityIds,
+        admissionFeeType === AdmissionFeeType.MANUAL ? manualAdmissionFee : undefined,
       );
     }
 
@@ -60,12 +64,31 @@ export class MembersService {
     return member;
   }
 
+  async bulkCreate(dtos: CreateMemberDto[]) {
+    const created = [];
+    for (const dto of dtos) {
+      created.push(await this.create(dto));
+    }
+    return { count: created.length, members: created };
+  }
+
   async findAll(filter: MemberFilterDto) {
     await this.membershipsService.syncExpiredMemberships();
-    const where: Prisma.MemberWhereInput = {};
+    const where: Prisma.MemberWhereInput = { status: { not: 'DELETED' } };
 
     if (filter.status) {
       where.status = filter.status;
+    }
+
+    if (filter.planId) {
+      where.memberships = { some: { planId: filter.planId } };
+    }
+
+    if (filter.joiningDateFrom || filter.joiningDateTo) {
+      where.joiningDate = {
+        ...(filter.joiningDateFrom ? { gte: new Date(filter.joiningDateFrom) } : {}),
+        ...(filter.joiningDateTo ? { lte: new Date(`${filter.joiningDateTo}T23:59:59.999Z`) } : {}),
+      };
     }
 
     if (filter.gender) {
@@ -128,7 +151,10 @@ export class MembersService {
       where: { id },
       include: {
           memberships: {
-            include: { plan: true },
+          include: { 
+            plan: true,
+            activities: { include: { activity: true } }
+          },
           orderBy: { createdAt: 'desc' },
         },
       },
@@ -169,7 +195,9 @@ export class MembersService {
       }
     }
 
-    const updateData: any = { ...dto };
+    const { activityIds, ...dtoUpdateData } = dto;
+    const updateData: any = { ...dtoUpdateData };
+    
     if (dto.dateOfBirth) {
       updateData.dateOfBirth = new Date(dto.dateOfBirth);
     }
@@ -177,9 +205,52 @@ export class MembersService {
       updateData.joiningDate = new Date(dto.joiningDate);
     }
 
-    const updatedMember = await this.prisma.member.update({
-      where: { id },
-      data: updateData,
+    const updatedMember = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.member.update({
+        where: { id },
+        data: updateData,
+      });
+
+      if (activityIds !== undefined) {
+        const activeMembership = await tx.membership.findFirst({
+          where: { memberId: id, status: 'ACTIVE', endDate: { gte: new Date() } },
+          include: { plan: true, payments: { where: { paymentStatus: { in: ['PENDING', 'PARTIAL'] } }, orderBy: { createdAt: 'desc' }, take: 1 } }
+        });
+        
+        if (activeMembership) {
+          const activities = await tx.activity.findMany({ where: { id: { in: activityIds } } });
+          if (activities.length !== new Set(activityIds).size) {
+            throw new BadRequestException('One or more selected activities do not exist.');
+          }
+          const activitiesPrice = activities.reduce((sum, act) => sum + Number(act.price), 0);
+          const newPlanPrice = Number(activeMembership.plan.price) + activitiesPrice;
+          const diff = newPlanPrice - Number(activeMembership.planPrice);
+          
+          await tx.membership.update({
+            where: { id: activeMembership.id },
+            data: {
+              planPrice: newPlanPrice,
+              activities: {
+                deleteMany: {},
+                create: activityIds.map(aId => ({ activityId: aId }))
+              }
+            }
+          });
+          
+          const pendingPayment = activeMembership.payments[0];
+          if (pendingPayment && diff !== 0) {
+            await tx.payment.update({
+              where: { id: pendingPayment.id },
+              data: {
+                amount: Number(pendingPayment.amount) + diff,
+                totalAmount: Number(pendingPayment.totalAmount) + diff,
+                remainingDue: Number(pendingPayment.remainingDue) + diff
+              }
+            });
+          }
+        }
+      }
+      return updated;
     });
 
     this.logger.log(`Updated member: ${updatedMember.memberId}`);

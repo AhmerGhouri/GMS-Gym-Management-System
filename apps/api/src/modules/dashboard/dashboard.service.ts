@@ -28,7 +28,7 @@ export class DashboardService {
     };
 
     const [totalMembers, activeMembers, expiredMembers, todayAttendance, activeMembershipsData, payments, recentMemberships, recentAttendance, recentMembers, recentlyExpiredMemberships, maleMembers, femaleMembers] = await Promise.all([
-      this.prisma.member.count(),
+      this.prisma.member.count({ where: { status: { not: MemberStatus.DELETED } } }),
       this.prisma.member.count({
         where: { status: MemberStatus.ACTIVE },
       }),

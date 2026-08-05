@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 import { DevicesController } from './devices.controller';
 import { DevicesService } from './devices.service';
-import { ZktecoModule } from '../../core/services/zkteco.module';
+import { DeviceModule } from '../device/device.module';
 
 @Module({
-  imports: [ZktecoModule],
+  imports: [DeviceModule],
   controllers: [DevicesController],
-  providers: [DevicesService]
+  providers: [DevicesService],
 })
 export class DevicesModule {}

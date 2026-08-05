@@ -71,6 +71,7 @@ enum PaymentStatus {
   PARTIAL
   PENDING
   REFUNDED
+  CANCELLED
 }
 
 enum DeviceConnectionType {
@@ -153,7 +154,7 @@ model User {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  auditLogs AuditLog[]
+  auditLogs  AuditLog[]
   customRole CustomRole? @relation(fields: [customRoleId], references: [id])
 
   @@map("users")
@@ -178,7 +179,7 @@ model Member {
   fatherName       String?      @map("father_name")
   gender           Gender
   dateOfBirth      DateTime?    @map("date_of_birth")
-  phone            String
+  phone            String?
   email            String?
   cnic             String?      @unique
   address          String?
@@ -241,14 +242,46 @@ model Membership {
   createdAt      DateTime         @default(now()) @map("created_at")
   updatedAt      DateTime         @updatedAt @map("updated_at")
 
-  member   Member         @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  plan     MembershipPlan @relation(fields: [planId], references: [id])
-  payments Payment[]
+  member     Member               @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  plan       MembershipPlan       @relation(fields: [planId], references: [id])
+  payments   Payment[]
+  activities MembershipActivity[]
 
   @@index([memberId])
   @@index([status])
   @@index([endDate])
   @@map("memberships")
+}
+
+/// Standalone activities / Add-ons (e.g. Gym, Cardio, Yoga)
+model Activity {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  memberships MembershipActivity[]
+
+  @@map("activities")
+}
+
+/// Junction table for Memberships and Activities
+model MembershipActivity {
+  id           String     @id @default(uuid())
+  membershipId String     @map("membership_id")
+  activityId   String     @map("activity_id")
+  assignedAt   DateTime   @default(now()) @map("assigned_at")
+
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  activity     Activity   @relation(fields: [activityId], references: [id])
+
+  @@unique([membershipId, activityId])
+  @@index([membershipId])
+  @@index([activityId])
+  @@map("membership_activities")
 }
 
 /// Payment records
@@ -281,20 +314,22 @@ model Payment {
 
 /// Attendance check-in/out records
 model AttendanceLog {
-  id       String    @id @default(uuid())
-  memberId String    @map("member_id")
-  checkIn  DateTime  @map("check_in")
-  checkOut DateTime? @map("check_out")
-  duration Int?      // Duration in minutes
-  source   String    @default("DEVICE") // DEVICE, MANUAL
-  deviceId String?   @map("device_id")
-  createdAt DateTime @default(now()) @map("created_at")
+  id             String    @id @default(uuid())
+  memberId       String    @map("member_id")
+  checkIn        DateTime  @map("check_in")
+  checkOut       DateTime? @map("check_out")
+  duration       Int?      // Duration in minutes
+  source         String    @default("DEVICE") // DEVICE, MANUAL
+  deviceId       String?   @map("device_id")
+  attendanceHash String?   @unique @map("attendance_hash")
+  createdAt      DateTime  @default(now()) @map("created_at")
 
   member Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
   device Device? @relation(fields: [deviceId], references: [id])
 
   @@index([memberId])
   @@index([checkIn])
+  @@index([attendanceHash])
   @@map("attendance_logs")
 }
 
@@ -327,6 +362,10 @@ model Device {
   status         DeviceStatus         @default(OFFLINE)
   serialNumber   String?              @map("serial_number")
   lastSyncAt     DateTime?            @map("last_sync_at")
+  lastSeen       DateTime?            @map("last_seen")
+  responseTimeMs Int?                 @map("response_time_ms")
+  lastError      String?              @map("last_error")
+  failedAt       DateTime?            @map("failed_at")
   isActive       Boolean              @default(true) @map("is_active")
   createdAt      DateTime             @default(now()) @map("created_at")
   updatedAt      DateTime             @updatedAt @map("updated_at")

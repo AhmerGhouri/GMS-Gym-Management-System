@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarDays, Clock, Search, Users, RefreshCw, Wifi } from 'lucide-react';
+import { Download, CalendarDays, Clock, Search, Users, RefreshCw, Wifi, Filter, X } from 'lucide-react';
 import { api } from '@/lib/api/axios';
+import * as XLSX from 'xlsx';
 import {
   AreaChart,
   Area,
@@ -26,19 +27,47 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { formatDate } from '@gms/utils';
 
 export default function AttendancePage() {
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [deviceId, setDeviceId] = useState('ALL');
+  const [source, setSource] = useState('ALL');
 
   const { data: logsData, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['attendance'],
+    queryKey: ['attendance', debouncedSearch, fromDate, toDate, deviceId, source],
     queryFn: async () => {
-      const res = await api.get('/attendance?take=200');
+      const params = new URLSearchParams({ take: '200' });
+      if (debouncedSearch) params.append('search', debouncedSearch);
+      if (fromDate) params.append('from', fromDate);
+      if (toDate) params.append('to', toDate);
+      if (deviceId !== 'ALL') params.append('deviceId', deviceId);
+      if (source !== 'ALL') params.append('source', source);
+      
+      const res = await api.get(`/attendance?${params.toString()}`);
       return res.data;
     },
     refetchInterval: 60_000, // refresh every minute
   });
+
+  const { data: devicesData } = useQuery({
+    queryKey: ['devices'],
+    queryFn: async () => {
+      const res = await api.get('/devices');
+      return res.data;
+    },
+  });
+  const devices = devicesData?.data || [];
 
   const { data: summaryData } = useQuery({
     queryKey: ['attendance-summary'],
@@ -60,12 +89,25 @@ export default function AttendancePage() {
     return new Date(log.checkIn).toDateString() === today;
   }).length;
 
-  const filteredLogs = attendanceLogs.filter((log: any) => {
-    if (!search) return true;
-    const memberName = `${log.member?.firstName} ${log.member?.lastName}`.toLowerCase();
-    const memberId = log.member?.memberId?.toLowerCase() || '';
-    return memberName.includes(search.toLowerCase()) || memberId.includes(search.toLowerCase());
-  });
+  const filteredLogs = attendanceLogs; // filtering is now done on the backend
+
+  const exportToExcel = () => {
+    if (!filteredLogs.length) return;
+    
+    const exportData = filteredLogs.map((log: any) => ({
+      'Member Name': `${log.member?.firstName} ${log.member?.lastName}`,
+      'Member ID': log.member?.memberId,
+      'Check In': new Date(log.checkIn).toLocaleString(),
+      'Check Out': log.checkOut ? new Date(log.checkOut).toLocaleString() : '—',
+      'Device': log.device?.name || '—',
+      'Source': log.source,
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Attendance');
+    XLSX.writeFile(workbook, `Attendance_Logs_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
 
   if (isLoading) {
     return (
@@ -86,16 +128,26 @@ export default function AttendancePage() {
           <h1 className="text-3xl font-bold tracking-tight text-white">Attendance</h1>
           <p className="text-slate-400">Live member check-ins from the ZKTeco device.</p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="border-slate-700 text-slate-300 hover:text-white gap-2"
-          onClick={() => refetch()}
-          disabled={isFetching}
-        >
-          <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="border-slate-700 text-slate-300 hover:text-white gap-2"
+            onClick={exportToExcel}
+            disabled={filteredLogs.length === 0}
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
+          <Button
+            variant="outline"
+            className="border-slate-700 text-slate-300 hover:text-white gap-2"
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -183,20 +235,92 @@ export default function AttendancePage() {
         </Card>
       )}
 
-      {/* Table */}
+      {/* Filters & Table */}
       <Card className="border-slate-800 bg-slate-900/50">
-        <div className="flex items-center border-b border-slate-800 p-4">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-            <Input
-              placeholder="Search by member name or ID..."
-              value={search}
-              onChange={(e: any) => setSearch(e.target.value)}
-              className="pl-9 border-slate-800 bg-slate-950 text-white placeholder:text-slate-500"
-            />
+        <div className="flex flex-col gap-4 border-b border-slate-800 p-4">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-cyan-500" />
+            <h3 className="text-sm font-semibold text-white">Advanced Filters</h3>
           </div>
-          <p className="ml-auto text-xs text-slate-500">
-            Showing {filteredLogs.length} of {attendanceLogs.length} records
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <Input
+                placeholder="Search member..."
+                value={search}
+                onChange={(e: any) => {
+                  setSearch(e.target.value);
+                  // simple inline debounce for search
+                  setTimeout(() => setDebouncedSearch(e.target.value), 500);
+                }}
+                className="pl-9 border-slate-800 bg-slate-950 text-white placeholder:text-slate-500 h-9 text-sm"
+              />
+            </div>
+            <div>
+              <Input
+                type="date"
+                value={fromDate}
+                onChange={(e: any) => setFromDate(e.target.value)}
+                className="border-slate-800 bg-slate-950 text-slate-300 h-9 text-sm"
+                title="From Date"
+              />
+            </div>
+            <div>
+              <Input
+                type="date"
+                value={toDate}
+                onChange={(e: any) => setToDate(e.target.value)}
+                className="border-slate-800 bg-slate-950 text-slate-300 h-9 text-sm"
+                title="To Date"
+              />
+            </div>
+            <Select value={deviceId} onValueChange={setDeviceId}>
+              <SelectTrigger className="h-9 border-slate-800 bg-slate-950 text-slate-300 text-sm">
+                <SelectValue placeholder="All Devices" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Devices</SelectItem>
+                {devices.map((d: any) => (
+                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-2">
+              <Select value={source} onValueChange={setSource}>
+                <SelectTrigger className="h-9 flex-1 border-slate-800 bg-slate-950 text-slate-300 text-sm">
+                  <SelectValue placeholder="All Sources" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Sources</SelectItem>
+                  <SelectItem value="DEVICE">Device</SelectItem>
+                  <SelectItem value="MANUAL">Manual</SelectItem>
+                </SelectContent>
+              </Select>
+              {(debouncedSearch || fromDate || toDate || deviceId !== 'ALL' || source !== 'ALL') && (
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  className="h-9 w-9 text-slate-400 hover:text-white"
+                  onClick={() => {
+                    setSearch('');
+                    setDebouncedSearch('');
+                    setFromDate('');
+                    setToDate('');
+                    setDeviceId('ALL');
+                    setSource('ALL');
+                  }}
+                  title="Clear Filters"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 pt-0 border-b border-slate-800 bg-slate-900">
+          <p className="text-xs text-slate-500 mt-4 text-right">
+            Showing {filteredLogs.length} records
           </p>
         </div>
 

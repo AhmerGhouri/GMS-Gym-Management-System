@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, CreditCard, Clock, Users, MoreHorizontal, Save, Loader2, Edit2 } from 'lucide-react';
 import { api } from '@/lib/api/axios';
@@ -74,10 +75,11 @@ type PlanFormValues = z.infer<typeof planSchema>;
 
 export default function MembershipsPage() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const memberIdFilter = searchParams.get('memberId');
   const [showPlanDialog, setShowPlanDialog] = useState(false);
   const [editingPlan, setEditingPlan] = useState<any>(null);
   const [planGender, setPlanGender] = useState('UNISEX');
-  const [activities, setActivities] = useState<Array<{ name: string; price: string }>>([]);
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<PlanFormValues>({
     resolver: zodResolver(planSchema),
@@ -100,11 +102,9 @@ export default function MembershipsPage() {
         durationDays: editingPlan.durationDays,
         price: Number(editingPlan.price),
         admissionFee: Number(editingPlan.admissionFee || 0),
-        activities: Array.isArray(editingPlan.activities) ? editingPlan.activities.join(', ') : '',
         description: editingPlan.description || '',
       });
       setPlanGender(editingPlan.gender || 'UNISEX');
-      setActivities(Array.isArray(editingPlan.activities) ? editingPlan.activities.map((item: any) => typeof item === 'string' ? { name: item, price: '' } : item) : []);
     }
   }, [editingPlan, reset]);
 
@@ -143,7 +143,6 @@ export default function MembershipsPage() {
     setShowPlanDialog(false);
     setEditingPlan(null);
     setPlanGender('UNISEX');
-    setActivities([]);
     reset({
       duration: PlanDuration.MONTHLY,
       gender: 'UNISEX',
@@ -163,7 +162,6 @@ export default function MembershipsPage() {
   const openCreateDialog = () => {
     setEditingPlan(null);
     setPlanGender('UNISEX');
-    setActivities([]);
     reset({
       duration: PlanDuration.MONTHLY,
       gender: 'UNISEX',
@@ -177,14 +175,10 @@ export default function MembershipsPage() {
   };
 
   const onSubmit = (data: PlanFormValues) => {
-    const normalizedData = {
-      ...data,
-      activities: planGender === 'FEMALE' ? activities.filter((activity) => activity.name.trim()) : [],
-    };
     if (editingPlan) {
-      updatePlanMutation.mutate({ ...normalizedData, id: editingPlan.id });
+      updatePlanMutation.mutate({ ...data, id: editingPlan.id });
     } else {
-      createPlanMutation.mutate(normalizedData);
+      createPlanMutation.mutate(data);
     }
   };
 
@@ -206,6 +200,9 @@ export default function MembershipsPage() {
 
   const plans = plansData?.data || [];
   const memberships = membershipsData?.data || [];
+  const visibleMemberships = memberIdFilter
+    ? memberships.filter((membership: any) => membership.memberId === memberIdFilter)
+    : memberships;
 
   const getMembershipStatusBadge = (status: MembershipStatus) => {
     switch (status) {
@@ -344,7 +341,7 @@ export default function MembershipsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                memberships.map((membership: any) => (
+                visibleMemberships.map((membership: any) => (
                   <TableRow key={membership.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -477,13 +474,7 @@ export default function MembershipsPage() {
               <Label>Description</Label>
               <Textarea placeholder="What does this plan include?" {...register('description')} />
             </div>
-            {planGender === 'FEMALE' && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between"><Label>Activities / Classes</Label><Button type="button" size="sm" variant="outline" onClick={() => setActivities((items) => [...items, { name: '', price: '' }])}>+ Add exercise</Button></div>
-                {activities.map((activity, index) => <div className="flex gap-2" key={index}><Input placeholder="Yoga" value={activity.name} onChange={(event) => setActivities((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /><Input className="w-28" type="number" min="0" placeholder="Price" value={activity.price} onChange={(event) => setActivities((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, price: event.target.value } : item))} /><Button type="button" variant="ghost" onClick={() => setActivities((items) => items.filter((_, itemIndex) => itemIndex !== index))}>Remove</Button></div>)}
-                {activities.length === 0 && <p className="text-xs text-slate-500">Use “+ Add exercise” to add Yoga, Pilates, etc. with a price.</p>}
-              </div>
-            )}
+
             <div className="sticky bottom-0 flex flex-col-reverse gap-2 bg-background pt-4 sm:flex-row sm:justify-end">
               <Button type="button" variant="outline" onClick={closePlanDialog}>Cancel</Button>
               <Button type="submit" disabled={isMutating} className="bg-cyan-600 hover:bg-cyan-500">

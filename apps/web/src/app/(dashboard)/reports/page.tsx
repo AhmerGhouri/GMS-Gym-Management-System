@@ -11,7 +11,9 @@ import {
   CalendarDays,
   ArrowUpRight,
   ArrowDownRight,
+  Printer,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import {
   AreaChart,
   Area,
@@ -54,20 +56,54 @@ export default function ReportsPage() {
     return <div className="text-white">Loading reports...</div>;
   }
 
+  const exportToExcel = () => {
+    const workbook = XLSX.utils.book_new();
+    
+    const summaryData = [
+      { Metric: 'Total Revenue', Value: formatCurrency(stats.monthlyRevenue || 0) },
+      { Metric: 'Active Members', Value: stats.activeMembers || 0 },
+      { Metric: 'Today\'s Attendance', Value: stats.todayAttendance || 0 },
+      { Metric: 'Outstanding Dues', Value: formatCurrency(stats.outstandingDues || 0) },
+    ];
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryData), 'Summary');
+
+    if (stats.revenueTrend?.length) {
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(stats.revenueTrend), 'Revenue Trend');
+    }
+
+    if (stats.memberGrowth?.length) {
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(stats.memberGrowth), 'Member Growth');
+    }
+
+    if (stats.attendancePattern?.length) {
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(stats.attendancePattern), 'Attendance Pattern');
+    }
+
+    if (stats.membershipDistribution?.length) {
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(stats.membershipDistribution), 'Plan Distribution');
+    }
+
+    XLSX.writeFile(workbook, `Gym_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const printReport = () => {
+    window.print();
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 print:m-0 print:p-0">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-white">Reports</h1>
           <p className="text-slate-400">Analytics and insights for your gym.</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="border-slate-700 bg-slate-900 text-slate-300">
-            <FileDown className="mr-2 h-4 w-4" /> Export PDF
+        <div className="flex gap-2 print:hidden">
+          <Button variant="outline" className="border-slate-700 bg-slate-900 text-slate-300" onClick={printReport}>
+            <Printer className="mr-2 h-4 w-4" /> Export PDF
           </Button>
-          <Button variant="outline" className="border-slate-700 bg-slate-900 text-slate-300">
-            <FileDown className="mr-2 h-4 w-4" /> Export CSV
+          <Button variant="outline" className="border-slate-700 bg-slate-900 text-slate-300" onClick={exportToExcel}>
+            <FileDown className="mr-2 h-4 w-4" /> Export Excel
           </Button>
         </div>
       </div>

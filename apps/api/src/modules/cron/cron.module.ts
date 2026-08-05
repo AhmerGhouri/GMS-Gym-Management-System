@@ -1,10 +1,9 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 import { ExpirationService } from './expiration.service';
-import { AttendanceSyncService } from './attendance-sync.service';
+import { DeviceModule } from '../device/device.module';
 
 @Module({
-  imports: [ScheduleModule.forRoot()],
-  providers: [ExpirationService, AttendanceSyncService],
+  imports: [DeviceModule],
+  providers: [ExpirationService],
 })
 export class CronModule {}

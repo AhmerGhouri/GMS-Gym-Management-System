@@ -43,12 +43,14 @@ export class MembershipsController {
 
   @Post()
   @ApiOperation({ summary: 'Assign a plan to a member' })
-  assignPlan(@Body() body: { memberId: string; planId: string; startDate?: string; includeAdmissionFee?: boolean }) {
+  assignPlan(@Body() body: { memberId: string; planId: string; startDate?: string; includeAdmissionFee?: boolean; activityIds?: string[]; manualAdmissionFee?: number }) {
     return this.membershipsService.assignPlan(
       body.memberId,
       body.planId,
       body.startDate ? new Date(body.startDate) : undefined,
       body.includeAdmissionFee,
+      body.activityIds,
+      body.manualAdmissionFee,
     );
   }
 
