@@ -5,6 +5,7 @@ import { PrismaService } from '../../../core/database/prisma.service';
 import { ZkConnectionService } from './zk-connection.service';
 import { DeviceLockService } from '../utils/device-lock.service';
 import { memberIdToDeviceUserId } from '../utils/attendance-hash.util';
+import { extractErrorMessage } from '../utils/zk-error-classifier';
 import { DEVICE_CONSTANTS } from '../constants/index';
 import type { DeviceRecord } from '../interfaces/index';
 import type { UserJobData, UserJobName } from '../types/index';
@@ -137,7 +138,7 @@ export class ZkUserService {
       this.logger.log(`Created user ${payload.userId} ("${payload.name}") on device "${device.name}"`);
       await this.updateSyncJobStatus(data.syncJobId, 'COMPLETED');
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = extractErrorMessage(error);
       this.logger.error(`Failed to create user ${payload.userId} on "${device.name}": ${message}`);
       await this.updateSyncJobStatus(data.syncJobId, 'FAILED', message);
       throw error; // Let BullMQ handle retry
@@ -165,7 +166,7 @@ export class ZkUserService {
       this.logger.log(`Deleted user ${payload.userId} from device "${device.name}"`);
       await this.updateSyncJobStatus(data.syncJobId, 'COMPLETED');
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = extractErrorMessage(error);
       this.logger.error(`Failed to delete user ${payload.userId} from "${device.name}": ${message}`);
       await this.updateSyncJobStatus(data.syncJobId, 'FAILED', message);
       throw error;
@@ -207,7 +208,7 @@ export class ZkUserService {
       this.logger.log(`Updated user ${payload.userId} on device "${device.name}"`);
       await this.updateSyncJobStatus(data.syncJobId, 'COMPLETED');
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = extractErrorMessage(error);
       this.logger.error(`Failed to update user ${payload.userId} on "${device.name}": ${message}`);
       await this.updateSyncJobStatus(data.syncJobId, 'FAILED', message);
       throw error;
@@ -227,7 +228,7 @@ export class ZkUserService {
         return result?.data ?? [];
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = extractErrorMessage(error);
       this.logger.error(`Failed to read users from "${device.name}": ${message}`);
       return [];
     }

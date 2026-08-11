@@ -4,7 +4,7 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../../../core/database/prisma.service';
 import { ZkConnectionService } from './zk-connection.service';
 import { DeviceLockService } from '../utils/device-lock.service';
-import { isNoDataError } from '../utils/zk-error-classifier';
+import { isNoDataError, extractErrorMessage } from '../utils/zk-error-classifier';
 import { generateAttendanceHash, deviceUserIdToMemberId } from '../utils/attendance-hash.util';
 import { DEVICE_CONSTANTS } from '../constants/index';
 import type { DeviceRecord } from '../interfaces/index';
@@ -19,6 +19,7 @@ import type { AttendanceJobData } from '../types/index';
  *
  * Key guarantees:
  *   - Never clears device attendance before a successful DB commit
+ *   - Only clears device when new records were actually inserted
  *   - Bulk insert with deduplication via `attendanceHash` unique constraint
  *   - Map-based member lookup — no N+1 queries
  *   - Distributed lock prevents concurrent syncs on the same device
@@ -76,7 +77,7 @@ export class ZkAttendanceService {
       const durationMs = Date.now() - startTime;
       this.logger.log(`Attendance sync completed for "${device.name}" in ${durationMs}ms`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = extractErrorMessage(error);
       this.logger.error(`Attendance sync failed for "${device.name}": ${message}`);
     } finally {
       await release();
@@ -130,6 +131,7 @@ export class ZkAttendanceService {
     const toCreate: AttendanceInsertRow[] = [];
     let skippedDuplicates = 0;
     let skippedUnknownMembers = 0;
+    const unmatchedDeviceUserIds = new Set<number>();
 
     for (const log of rawLogs) {
       const hash = generateAttendanceHash(device.id, log.user_id, log.record_time);
@@ -144,6 +146,7 @@ export class ZkAttendanceService {
 
       if (!dbMemberId) {
         skippedUnknownMembers++;
+        unmatchedDeviceUserIds.add(log.user_id);
         continue;
       }
 
@@ -160,7 +163,11 @@ export class ZkAttendanceService {
       this.logger.debug(`Skipped ${skippedDuplicates} duplicate records`);
     }
     if (skippedUnknownMembers > 0) {
-      this.logger.warn(`Skipped ${skippedUnknownMembers} records with unrecognized member IDs`);
+      const ids = Array.from(unmatchedDeviceUserIds).join(', ');
+      this.logger.warn(
+        `Skipped ${skippedUnknownMembers} records with unrecognized member IDs. ` +
+        `Device user IDs: [${ids}] → mapped GMS IDs: [${Array.from(unmatchedDeviceUserIds).map(id => deviceUserIdToMemberId(id)).join(', ')}]`,
+      );
     }
 
     // Step 5: Transactional bulk insert
@@ -172,20 +179,24 @@ export class ZkAttendanceService {
         });
       });
       this.logger.log(`Inserted ${toCreate.length} new attendance records for "${device.name}"`);
-    } else {
-      this.logger.debug(`All fetched logs were duplicates or unmatched for "${device.name}"`);
-    }
 
-    // Step 6: Clear device attendance ONLY after successful DB commit
-    try {
-      await this.connection.withConnection(device, async (zk) => {
-        await zk.clearAttendanceLog();
-      });
-      this.logger.log(`Cleared attendance logs on device "${device.name}"`);
-    } catch (clearError) {
-      // Log but don't fail the sync — data is safely in DB
-      const message = clearError instanceof Error ? clearError.message : String(clearError);
-      this.logger.warn(`Failed to clear attendance on "${device.name}": ${message}. Data is safe in DB.`);
+      // Step 6: Clear device attendance ONLY after successful DB commit
+      // and ONLY when we actually inserted records
+      try {
+        await this.connection.withConnection(device, async (zk) => {
+          await zk.clearAttendanceLog();
+        });
+        this.logger.log(`Cleared attendance logs on device "${device.name}"`);
+      } catch (clearError) {
+        // Log but don't fail the sync — data is safely in DB
+        const message = extractErrorMessage(clearError);
+        this.logger.warn(`Failed to clear attendance on "${device.name}": ${message}. Data is safe in DB.`);
+      }
+    } else {
+      this.logger.debug(
+        `No new records to insert for "${device.name}" — device logs preserved ` +
+        `(${skippedDuplicates} duplicates, ${skippedUnknownMembers} unmatched)`,
+      );
     }
 
     // Step 7: Update device sync timestamp

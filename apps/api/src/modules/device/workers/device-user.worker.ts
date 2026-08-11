@@ -2,6 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { ZkUserService } from '../services/zk-user.service';
+import { extractErrorMessage } from '../utils/zk-error-classifier';
 import { DEVICE_CONSTANTS } from '../constants/index';
 import type { UserJobData, UserJobName } from '../types/index';
 
@@ -32,7 +33,7 @@ export class DeviceUserWorker extends WorkerHost {
           this.logger.warn(`Unknown user job name: ${jobName}`);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = extractErrorMessage(error);
       this.logger.error(`User job ${job.id} (${jobName}) failed: ${message}`);
       throw error;
     }

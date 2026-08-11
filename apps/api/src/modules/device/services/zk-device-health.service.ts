@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../core/database/prisma.service';
 import { ZkConnectionService } from './zk-connection.service';
 import { DeviceLockService } from '../utils/device-lock.service';
-import { isNoDataError } from '../utils/zk-error-classifier';
+import { isNoDataError, extractErrorMessage } from '../utils/zk-error-classifier';
 import { DEVICE_CONSTANTS } from '../constants/index';
 import type { DeviceRecord } from '../interfaces/index';
 import type { DeviceHealthStatus } from '../interfaces/index';
@@ -46,7 +46,8 @@ export class ZkDeviceHealthService {
 
     try {
       await this.connection.withConnection(device as unknown as DeviceRecord, async (zk) => {
-        await zk.getAttendances();
+        // Use getInfo() for health check — lightweight command, doesn't transfer bulk data
+        await zk.getInfo();
       });
 
       const responseTimeMs = Date.now() - startTime;
@@ -99,7 +100,7 @@ export class ZkDeviceHealthService {
         };
       }
 
-      const message = error instanceof Error ? error.message : String(error);
+      const message = extractErrorMessage(error);
 
       await this.prisma.device.update({
         where: { id: device.id },

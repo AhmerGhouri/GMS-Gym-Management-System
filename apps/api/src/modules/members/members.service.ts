@@ -12,6 +12,7 @@ import { generateMemberId } from '@gms/utils';
 import { Prisma } from '@prisma/client';
 
 import { MembershipsService } from '../memberships/memberships.service';
+import { ZkUserService } from '../device/services/zk-user.service';
 
 @Injectable()
 export class MembersService {
@@ -20,6 +21,7 @@ export class MembersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly membershipsService: MembershipsService,
+    private readonly zkUser: ZkUserService,
   ) {}
 
   async create(dto: CreateMemberDto) {
@@ -61,6 +63,13 @@ export class MembersService {
     }
 
     this.logger.log(`Created new member: ${member.memberId}`);
+
+    // Register member on all active ZKTeco devices
+    if (planId) {
+      const fullName = `${member.firstName} ${member.lastName}`.trim();
+      await this.zkUser.enqueueEnableOnAllDevices(member.memberId, fullName);
+    }
+
     return member;
   }
 
@@ -265,6 +274,9 @@ export class MembersService {
       where: { id },
       data: { status: 'DELETED' },
     });
+
+    // Remove member from all active ZKTeco devices
+    await this.zkUser.enqueueDisableOnAllDevices(member.memberId);
 
     this.logger.log(`Soft deleted member: ${member.memberId}`);
     return { message: 'Member deleted successfully' };

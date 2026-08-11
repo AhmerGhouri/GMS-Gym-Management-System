@@ -1,12 +1,19 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { MembershipStatus } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { CreatePlanDto, UpdatePlanDto, UpdateMembershipDto } from './dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ZkUserService } from '../device/services/zk-user.service';
 
 @Injectable()
 export class MembershipsService {
-  constructor(private readonly prisma: PrismaService, private readonly notifications: NotificationsService) {}
+  private readonly logger = new Logger(MembershipsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+    private readonly zkUser: ZkUserService,
+  ) {}
 
   async getPlans() {
     return this.prisma.membershipPlan.findMany({
@@ -60,6 +67,9 @@ export class MembershipsService {
     const now = new Date();
     const overdueMemberships = await this.prisma.membership.findMany({
       where: { status: MembershipStatus.ACTIVE, endDate: { lt: now } },
+      include: {
+        member: { select: { id: true, memberId: true, firstName: true, lastName: true } },
+      },
     });
 
     for (const membership of overdueMemberships) {
@@ -97,6 +107,20 @@ export class MembershipsService {
           await tx.member.update({ where: { id: membership.memberId }, data: { status: 'INACTIVE' } });
         }
       });
+
+      // Disable member on all ZKTeco devices if no active memberships remain
+      const stillActiveAfterTx = await this.prisma.membership.count({
+        where: {
+          memberId: membership.memberId,
+          status: MembershipStatus.ACTIVE,
+          endDate: { gte: now },
+        },
+      });
+
+      if (stillActiveAfterTx === 0 && membership.member) {
+        await this.zkUser.enqueueDisableOnAllDevices(membership.member.memberId);
+        this.logger.log(`Disabled device access for expired member ${membership.member.memberId}`);
+      }
     }
   }
 
@@ -184,12 +208,23 @@ export class MembershipsService {
       await tx.member.update({ where: { id: memberId }, data: { status: 'ACTIVE' } });
       return createdMembership;
     });
+
+    // Register member on all active ZKTeco devices
+    const fullName = `${member.firstName} ${member.lastName}`.trim();
+    await this.zkUser.enqueueEnableOnAllDevices(member.memberId, fullName);
+    this.logger.log(`Enabled device access for member ${member.memberId}`);
+
     await this.notifications.notifyAdmins('Membership created', `${member.firstName} ${member.lastName} was assigned ${plan.name}. The initial payment was recorded as paid.`, 'PAYMENT_RECEIVED', memberId);
     return membership;
   }
 
   async updateMembership(id: string, dto: UpdateMembershipDto) {
-    const membership = await this.prisma.membership.findUnique({ where: { id } });
+    const membership = await this.prisma.membership.findUnique({
+      where: { id },
+      include: {
+        member: { select: { id: true, memberId: true, firstName: true, lastName: true } },
+      },
+    });
     if (!membership) throw new NotFoundException('Membership not found');
     if (dto.status === MembershipStatus.ACTIVE) {
       const [otherActive, unpaid] = await Promise.all([
@@ -211,11 +246,34 @@ export class MembershipsService {
       where: { id },
       data,
     });
+
+    // Handle device sync based on status change
     if (dto.status === MembershipStatus.ACTIVE) {
       await this.prisma.member.update({ where: { id: membership.memberId }, data: { status: 'ACTIVE' } });
+
+      // Re-register member on all devices
+      if (membership.member) {
+        const fullName = `${membership.member.firstName} ${membership.member.lastName}`.trim();
+        await this.zkUser.enqueueEnableOnAllDevices(membership.member.memberId, fullName);
+        this.logger.log(`Re-enabled device access for member ${membership.member.memberId}`);
+      }
     }
     if (dto.status === MembershipStatus.INACTIVE || dto.status === MembershipStatus.SUSPENDED || dto.status === MembershipStatus.CANCELLED) {
       await this.prisma.member.update({ where: { id: membership.memberId }, data: { status: 'INACTIVE' } });
+
+      // Disable member on all devices (only if no other active membership)
+      const hasOtherActive = await this.prisma.membership.findFirst({
+        where: {
+          memberId: membership.memberId,
+          status: MembershipStatus.ACTIVE,
+          id: { not: id },
+        },
+      });
+
+      if (!hasOtherActive && membership.member) {
+        await this.zkUser.enqueueDisableOnAllDevices(membership.member.memberId);
+        this.logger.log(`Disabled device access for member ${membership.member.memberId}`);
+      }
     }
     return updatedMembership;
   }

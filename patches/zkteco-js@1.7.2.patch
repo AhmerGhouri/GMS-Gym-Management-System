@@ -1,0 +1,34 @@
+diff --git a/index.js b/index.js
+index 070a95d880f4becd9f026f718f45c0b584c607f7..05c2b8ee344c0b154a8ea5fa0a879548da09e1fd 100644
+--- a/index.js
++++ b/index.js
+@@ -58,9 +58,10 @@ class ZktecoJs {
+             }
+         } catch (err) {
+             // Wrap the error in a ZkError and include context
++            const connType = this.connectionType ? this.connectionType.toUpperCase() : 'UNKNOWN';
+             throw new ZkError(
+                 err,
+-                `[${this.connectionType.toUpperCase()}] ${command}`,
++                `[${connType}] ${command}`,
+                 this.ip
+             );
+         }
+diff --git a/src/ztcp.js b/src/ztcp.js
+index 4d49bbb862f12e391d23f26a898930c0ccab8a3d..317256062ba7c538f9fde2490110d54572a16d8c 100644
+--- a/src/ztcp.js
++++ b/src/ztcp.js
+@@ -330,8 +330,12 @@ class ZTCP {
+ 
+             } catch (err) {
+                 reject(err)
+-                console.log(reply)
++                return;
++            }
+ 
++            if (!reply) {
++                reject(new Error('NO_REPLY_DATA'));
++                return;
+             }
+ 
+             const header = decodeTCPHeader(reply.subarray(0, 16))

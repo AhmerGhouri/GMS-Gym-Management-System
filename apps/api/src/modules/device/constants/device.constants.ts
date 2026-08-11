@@ -31,7 +31,7 @@ export const DEVICE_CONSTANTS = {
   RETRY_DELAYS: [1_000, 2_000, 5_000] as readonly number[],
 
   // ── Scheduler Intervals ──
-  CRON_ATTENDANCE_SYNC: '*/5 * * * *', // every 5 minutes
+  CRON_ATTENDANCE_SYNC: '*/2 * * * *', // every 2 minutes (testing)
   CRON_HEALTH_CHECK: '*/1 * * * *',     // every minute
   CRON_SYNC_JOB: '*/1 * * * *',         // every minute
 

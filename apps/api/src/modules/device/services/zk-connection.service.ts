@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../../../core/database/prisma.service';
 import { DEVICE_CONSTANTS } from '../constants/index';
 import { retryWithBackoff } from '../utils/retry.helper';
-import { isRetryableError, isNoDataError } from '../utils/zk-error-classifier';
+import { isRetryableError, isNoDataError, extractErrorMessage } from '../utils/zk-error-classifier';
 import type { DeviceConnectionInfo } from '../interfaces/index';
 import { DeviceConnectionException } from '../exceptions/index';
 
@@ -15,9 +15,13 @@ interface ZkInstance {
   getAttendances: () => Promise<{ data: unknown[] }>;
   clearAttendanceLog: () => Promise<unknown>;
   getUsers: () => Promise<{ data: unknown[] }>;
+  getInfo: () => Promise<unknown>;
   setUser: (uid: number, odUserId: string, name: string, password: string, role: number, cardno: number) => Promise<unknown>;
   deleteUser: (uid: number) => Promise<unknown>;
   disconnect: () => Promise<void>;
+  /** Internal TCP transport — used for safe cleanup only. */
+  ztcp?: { socket: unknown; closeSocket: () => Promise<unknown> };
+  connectionType: string | null;
 }
 
 /**
@@ -73,7 +77,7 @@ export class ZkConnectionService implements OnModuleDestroy {
         throw error;
       }
 
-      const message = error instanceof Error ? error.message : String(error);
+      const message = extractErrorMessage(error);
       this.logger.error(`Operation failed on device "${device.name}": ${message}`);
       throw error;
     } finally {
@@ -113,12 +117,12 @@ export class ZkConnectionService implements OnModuleDestroy {
         shouldRetry: (err) => isRetryableError(err),
         onRetry: (err, attempt) => {
           this.logger.warn(
-            `Connection retry ${attempt}/${DEVICE_CONSTANTS.RETRY_ATTEMPTS} for "${device.name}": ${err.message}`,
+            `Connection retry ${attempt}/${DEVICE_CONSTANTS.RETRY_ATTEMPTS} for "${device.name}": ${extractErrorMessage(err)}`,
           );
         },
       },
     ).catch(async (err) => {
-      const errorMessage = err instanceof Error ? err.message : String(err);
+      const errorMessage = extractErrorMessage(err);
       
       this.logger.error(`Connection to "${device.name}" failed after all retries. Marking OFFLINE.`);
       
@@ -144,10 +148,24 @@ export class ZkConnectionService implements OnModuleDestroy {
    */
   private async safeDisconnect(zk: ZkInstance, deviceName: string): Promise<void> {
     try {
+      // If the library's internal connectionType is null (failed connection),
+      // calling zk.disconnect() would crash in functionWrapper(). 
+      // Go directly to low-level socket cleanup instead.
+      if (!zk.connectionType && zk.ztcp?.socket) {
+        await zk.ztcp.closeSocket();
+        this.logger.debug(`Force-closed socket for "${deviceName}" (no connectionType)`);
+        return;
+      }
+
+      if (!zk.connectionType) {
+        // Nothing to disconnect — connection never established
+        return;
+      }
+
       await zk.disconnect();
       this.logger.debug(`Disconnected from device "${deviceName}"`);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = extractErrorMessage(err);
       this.logger.warn(`Disconnect warning for "${deviceName}": ${message}`);
       // Never re-throw — disconnect errors are non-fatal
     }

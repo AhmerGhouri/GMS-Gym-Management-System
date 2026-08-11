@@ -23,23 +23,25 @@ export function generateAttendanceHash(
 /**
  * Convert a ZKTeco device user_id to a GMS member ID string.
  *
- * Example: `10001` → `"GMS-0001"`, `10042` → `"GMS-0042"`
- * Note: A 10000 offset is applied to prevent colliding with manually added admins (IDs 1, 2, 3...)
+ * Example: `18` → `"GMS-0018"`, `42` → `"GMS-0042"`
+ *
+ * Direct mapping — no offset. The ZKTeco K40 supports UIDs 1-3000.
  */
 export function deviceUserIdToMemberId(deviceUserId: number): string {
-  const original = deviceUserId - 10000;
-  return `${DEVICE_CONSTANTS.MEMBER_ID_PREFIX}${String(original).padStart(DEVICE_CONSTANTS.MEMBER_ID_PAD_LENGTH, '0')}`;
+  return `${DEVICE_CONSTANTS.MEMBER_ID_PREFIX}${String(deviceUserId).padStart(DEVICE_CONSTANTS.MEMBER_ID_PAD_LENGTH, '0')}`;
 }
 
 /**
  * Extract the numeric device user ID from a GMS member ID string.
  *
- * Example: `"GMS-0042"` → `10042`
- * Note: A 10000 offset is added to prevent colliding with manually added admins (IDs 1, 2, 3...)
- * Returns `null` if the format is invalid.
+ * Example: `"GMS-0042"` → `42`, `"GMS-0001"` → `1`
+ *
+ * Direct mapping — no offset. The ZKTeco K40 supports UIDs 1-3000.
+ * Returns `null` if the format is invalid or the UID is out of range.
  */
 export function memberIdToDeviceUserId(memberId: string): number | null {
   const numericPart = memberId.replace(/\D/g, '');
   const parsed = parseInt(numericPart, 10);
-  return isNaN(parsed) ? null : parsed + 10000;
+  if (isNaN(parsed) || parsed <= 0 || parsed > 3000) return null;
+  return parsed;
 }

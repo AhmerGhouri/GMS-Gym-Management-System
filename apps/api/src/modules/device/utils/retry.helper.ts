@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import { extractErrorMessage } from './zk-error-classifier';
 
 /** Configuration for the retry helper. */
 export interface RetryOptions {
@@ -40,7 +41,7 @@ export async function retryWithBackoff<T>(
 
       // Check if we should even retry this type of error
       if (shouldRetry && !shouldRetry(lastError)) {
-        logger.debug(`Non-retryable error, aborting: ${lastError.message}`);
+        logger.debug(`Non-retryable error, aborting: ${extractErrorMessage(lastError)}`);
         throw lastError;
       }
 
@@ -51,7 +52,7 @@ export async function retryWithBackoff<T>(
 
       const delay = delays[attempt] ?? delays[delays.length - 1];
       onRetry?.(lastError, attempt + 1);
-      logger.debug(`Retry ${attempt + 1}/${retries} in ${delay}ms — ${lastError.message}`);
+      logger.debug(`Retry ${attempt + 1}/${retries} in ${delay}ms — ${extractErrorMessage(lastError)}`);
       await new Promise<void>((resolve) => setTimeout(resolve, delay));
     }
   }
