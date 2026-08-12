@@ -237,7 +237,7 @@ export class DashboardService {
     return accessLogs.map(log => ({
       id: log.id,
       type: log.result === 'GRANTED' ? 'check_in' : 'access_denied',
-      memberName: log.member ? `${log.member.firstName} ${log.member.lastName}` : 'Unknown',
+      memberName: log.member ? `${log.member.firstName} ${log.member.lastName || ''}`.trim() : 'Unknown',
       description: log.result === 'GRANTED' ? 'Checked in' : `Access denied — ${log.denyReason || 'Unknown'}`,
       timestamp: log.timestamp,
     }));

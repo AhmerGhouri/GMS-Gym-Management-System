@@ -118,7 +118,7 @@ export class ZkSyncService {
         case 'CREATE_USER':
           await this.user.enqueueCreate(deviceId, {
             userId: uid,
-            name: `${member.firstName} ${member.lastName}`,
+            name: `${member.firstName} ${member.lastName || ''}`.trim(),
           }, syncJobId);
           break;
 
@@ -130,7 +130,7 @@ export class ZkSyncService {
         case 'UPDATE_USER':
           await this.user.enqueueUpdate(deviceId, {
             userId: uid,
-            name: `${member.firstName} ${member.lastName}`,
+            name: `${member.firstName} ${member.lastName || ''}`.trim(),
           }, syncJobId);
           break;
 

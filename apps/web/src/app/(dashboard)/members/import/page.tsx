@@ -20,7 +20,15 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/use-toast';
 import { api } from '@/lib/api/axios';
-import { Gender } from '@gms/types';
+import { Gender, MemberStatus } from '@gms/types';
+import { useQuery } from '@tanstack/react-query';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface ParsedMember {
   id: string;
@@ -35,6 +43,9 @@ interface ParsedMember {
   address?: string;
   emergencyContact?: string;
   timeSlot?: string;
+  joiningDate?: string;
+  planId?: string;
+  status?: MemberStatus;
 }
 
 interface ImportResult {
@@ -44,6 +55,15 @@ interface ImportResult {
 }
 
 export default function BulkImportPage() {
+  const { data: plansData } = useQuery({
+    queryKey: ['membership-plans'],
+    queryFn: async () => {
+      const res = await api.get('/memberships/plans');
+      return res.data;
+    },
+  });
+  const plans = (plansData?.data || []).filter((plan: any) => plan.isActive);
+
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<ParsedMember[]>([]);
   const [isParsing, setIsParsing] = useState(false);
@@ -82,8 +102,8 @@ export default function BulkImportPage() {
 
         const mappedData: ParsedMember[] = json.map((row, index) => ({
           id: `temp-${index}`,
-          firstName: row['First Name'] || row.firstName || '',
-          lastName: row['Last Name'] || row.lastName || '',
+          firstName: row['First Name'] || row.firstName,
+          lastName: row['Last Name'] || row.lastName || undefined,
           fatherName: row['Father Name'] || row.fatherName || undefined,
           gender: parseGender(row['Gender'] || row.gender),
           phone: row['Phone'] || row.phone ? String(row['Phone'] || row.phone) : undefined,
@@ -93,13 +113,14 @@ export default function BulkImportPage() {
           address: row['Address'] || row.address || undefined,
           emergencyContact: row['Emergency Contact'] || row.emergencyContact ? String(row['Emergency Contact'] || row.emergencyContact) : undefined,
           timeSlot: row['Time Slot'] || row.timeSlot || undefined,
-        })).filter(row => row.firstName && row.lastName); // Basic validation: require names
+          joiningDate: row['Joining Date'] || row.joiningDate ? parseDate(row['Joining Date'] || row.joiningDate) : undefined,
+        })).filter(row => row.firstName); // Basic validation: require names
 
         setParsedData(mappedData);
         if (mappedData.length === 0) {
           toast({
             title: 'No valid data found',
-            description: 'Ensure your file has First Name and Last Name columns.',
+            description: 'Ensure your file has at least a First Name column.',
             variant: 'destructive',
           });
         }
@@ -148,6 +169,15 @@ export default function BulkImportPage() {
 
   const removeRow = (id: string) => {
     setParsedData(prev => prev.filter(row => row.id !== id));
+  };
+
+  const updateRow = (id: string, field: keyof ParsedMember, value: any) => {
+    setParsedData(prev => prev.map(row => {
+      if (row.id === id) {
+        return { ...row, [field]: value === 'none' ? undefined : value };
+      }
+      return row;
+    }));
   };
 
   const clearFile = () => {
@@ -340,6 +370,9 @@ export default function BulkImportPage() {
                       <TableHead className="font-semibold text-slate-600 dark:text-slate-400">Gender</TableHead>
                       <TableHead className="font-semibold text-slate-600 dark:text-slate-400">Phone</TableHead>
                       <TableHead className="font-semibold text-slate-600 dark:text-slate-400">CNIC</TableHead>
+                      <TableHead className="font-semibold text-slate-600 dark:text-slate-400">Joining Date</TableHead>
+                      <TableHead className="font-semibold text-slate-600 dark:text-slate-400">Membership</TableHead>
+                      <TableHead className="font-semibold text-slate-600 dark:text-slate-400">Status</TableHead>
                       <TableHead className="text-right font-semibold text-slate-600 dark:text-slate-400 w-16">Action</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -362,6 +395,26 @@ export default function BulkImportPage() {
                           </TableCell>
                           <TableCell className="text-slate-600 dark:text-slate-400 font-mono text-sm">{row.phone || '—'}</TableCell>
                           <TableCell className="text-slate-600 dark:text-slate-400 font-mono text-sm">{row.cnic || '—'}</TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400 font-mono text-sm">{row.joiningDate || '—'}</TableCell>
+                          <TableCell>
+                            <Select value={row.planId || 'none'} onValueChange={(val) => updateRow(row.id, 'planId', val)}>
+                              <SelectTrigger className="w-[140px] bg-white dark:bg-slate-950"><SelectValue placeholder="No Plan" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No Plan</SelectItem>
+                                {plans.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            <Select value={row.status || 'ACTIVE'} onValueChange={(val) => updateRow(row.id, 'status', val)}>
+                              <SelectTrigger className="w-[110px] bg-white dark:bg-slate-950"><SelectValue placeholder="Status" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="ACTIVE">Active</SelectItem>
+                                <SelectItem value="INACTIVE">Inactive</SelectItem>
+                                <SelectItem value="FROZEN">Frozen</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
                           <TableCell className="text-right">
                             <Button variant="ghost" size="icon" onClick={() => removeRow(row.id)} className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50">
                               <Trash2 className="h-4 w-4" />

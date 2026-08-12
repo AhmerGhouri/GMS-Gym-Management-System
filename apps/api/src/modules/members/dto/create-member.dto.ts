@@ -15,7 +15,7 @@ import {
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Gender } from '@prisma/client';
+import { Gender, MemberStatus } from '@prisma/client';
 
 export enum AdmissionFeeType {
   NONE = 'NONE',
@@ -30,11 +30,11 @@ export class CreateMemberDto {
   @MaxLength(100)
   firstName: string;
 
-  @ApiProperty({ example: 'Khan' })
+  @ApiPropertyOptional({ example: 'Khan' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(100)
-  lastName: string;
+  lastName?: string;
 
   @ApiPropertyOptional({ example: 'Muhammad Khan' })
   @IsOptional()
@@ -127,4 +127,9 @@ export class CreateMemberDto {
   @IsString()
   @MaxLength(1000)
   notes?: string;
+
+  @ApiPropertyOptional({ enum: MemberStatus, example: MemberStatus.ACTIVE })
+  @IsOptional()
+  @IsEnum(MemberStatus)
+  status?: MemberStatus;
 }

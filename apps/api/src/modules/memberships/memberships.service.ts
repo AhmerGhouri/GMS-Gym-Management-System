@@ -210,11 +210,11 @@ export class MembershipsService {
     });
 
     // Register member on all active ZKTeco devices
-    const fullName = `${member.firstName} ${member.lastName}`.trim();
+    const fullName = `${member.firstName} ${member.lastName || ''}`.trim();
     await this.zkUser.enqueueEnableOnAllDevices(member.memberId, fullName);
     this.logger.log(`Enabled device access for member ${member.memberId}`);
 
-    await this.notifications.notifyAdmins('Membership created', `${member.firstName} ${member.lastName} was assigned ${plan.name}. The initial payment was recorded as paid.`, 'PAYMENT_RECEIVED', memberId);
+    await this.notifications.notifyAdmins('Membership created', `${fullName} was assigned ${plan.name}. The initial payment was recorded as paid.`, 'PAYMENT_RECEIVED', memberId);
     return membership;
   }
 
@@ -253,7 +253,7 @@ export class MembershipsService {
 
       // Re-register member on all devices
       if (membership.member) {
-        const fullName = `${membership.member.firstName} ${membership.member.lastName}`.trim();
+        const fullName = `${membership.member.firstName} ${membership.member.lastName || ''}`.trim();
         await this.zkUser.enqueueEnableOnAllDevices(membership.member.memberId, fullName);
         this.logger.log(`Re-enabled device access for member ${membership.member.memberId}`);
       }

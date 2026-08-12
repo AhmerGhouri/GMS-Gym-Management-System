@@ -27,11 +27,11 @@ import { Gender, MemberStatus } from '@gms/types';
 
 const memberSchema = z.object({
   firstName: z.string().min(2, 'First name must be at least 2 characters'),
-  lastName: z.string().min(2, 'Last name must be at least 2 characters'),
+  lastName: z.string().optional().or(z.literal('')),
   fatherName: z.string().optional(),
   gender: z.nativeEnum(Gender),
   joiningDate: z.string().optional(),
-  phone: z.string().min(10, 'Phone number must be at least 10 digits'),
+  phone: z.string().optional().or(z.literal('')),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
   cnic: z.string().optional(),
   address: z.string().optional(),
@@ -169,7 +169,7 @@ export default function EditMemberPage() {
                     {errors.firstName && <p className="text-xs text-destructive">{errors.firstName.message}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="lastName" className="text-slate-300">Last Name *</Label>
+                    <Label htmlFor="lastName" className="text-slate-300">Last Name</Label>
                     <Input
                       id="lastName"
                       className="border-slate-800 bg-slate-950 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500"

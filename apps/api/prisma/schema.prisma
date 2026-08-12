@@ -175,7 +175,7 @@ model Member {
   id               String       @id @default(uuid())
   memberId         String       @unique @map("member_id")
   firstName        String       @map("first_name")
-  lastName         String       @map("last_name")
+  lastName         String?      @map("last_name")
   fatherName       String?      @map("father_name")
   gender           Gender
   dateOfBirth      DateTime?    @map("date_of_birth")

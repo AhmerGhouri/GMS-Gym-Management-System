@@ -28,7 +28,7 @@ import { Gender } from '@gms/types';
 
 const memberSchema = z.object({
   firstName: z.string().min(2, 'First name must be at least 2 characters'),
-  lastName: z.string().min(2, 'Last name must be at least 2 characters'),
+  lastName: z.string().optional().or(z.literal('')),
   fatherName: z.string().optional(),
   gender: z.nativeEnum(Gender),
   joiningDate: z.string().optional(),
@@ -173,7 +173,7 @@ export default function NewMemberPage() {
                       )}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="lastName" className="text-slate-700 dark:text-slate-300">Last Name *</Label>
+                      <Label htmlFor="lastName" className="text-slate-700 dark:text-slate-300">Last Name</Label>
                       <Input
                         id="lastName"
                         placeholder="Khan"

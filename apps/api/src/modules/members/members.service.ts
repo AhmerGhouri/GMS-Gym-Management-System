@@ -47,7 +47,7 @@ export class MembersService {
         cnic: memberData.cnic || undefined,
         memberId,
         joiningDate: joiningDate ? new Date(joiningDate) : new Date(),
-        status: planId ? 'ACTIVE' : 'ACTIVE', // Changed to ACTIVE as per requirement 4
+        status: memberData.status || 'ACTIVE',
       },
     });
 
@@ -66,7 +66,7 @@ export class MembersService {
 
     // Register member on all active ZKTeco devices
     if (planId) {
-      const fullName = `${member.firstName} ${member.lastName}`.trim();
+      const fullName = `${member.firstName} ${member.lastName || ''}`.trim();
       await this.zkUser.enqueueEnableOnAllDevices(member.memberId, fullName);
     }
 
