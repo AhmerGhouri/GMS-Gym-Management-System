@@ -22,10 +22,5 @@
   },
   "devDependencies": {
     "turbo": "^2.10.5"
-  },
-  "pnpm": {
-    "patchedDependencies": {
-      "zkteco-js@1.7.2": "patches/zkteco-js@1.7.2.patch"
-    }
   }
 }
