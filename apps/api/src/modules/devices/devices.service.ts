@@ -80,7 +80,14 @@ export class DevicesService {
   async deleteDevice(id: string) {
     const device = await this.prisma.device.findUnique({ where: { id } });
     if (!device) throw new NotFoundException('Device not found');
-    await this.prisma.device.delete({ where: { id } });
+
+    // Delete related records first to avoid FK constraint violations
+    await this.prisma.$transaction([
+      this.prisma.syncJob.deleteMany({ where: { deviceId: id } }),
+      this.prisma.gateAccessLog.deleteMany({ where: { deviceId: id } }),
+      this.prisma.attendanceLog.deleteMany({ where: { deviceId: id } }),
+      this.prisma.device.delete({ where: { id } }),
+    ]);
   }
 
   async testConnection(id: string) {

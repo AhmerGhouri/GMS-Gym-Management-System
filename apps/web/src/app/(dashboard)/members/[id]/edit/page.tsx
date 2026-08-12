@@ -87,11 +87,11 @@ export default function EditMemberPage() {
       const member = memberData.data;
       reset({
         firstName: member.firstName,
-        lastName: member.lastName,
+        lastName: member.lastName || '',
         fatherName: member.fatherName || '',
         gender: member.gender,
         joiningDate: member.joiningDate ? new Date(member.joiningDate).toISOString().split('T')[0] : '',
-        phone: member.phone,
+        phone: member.phone || '',
         email: member.email || '',
         cnic: member.cnic || '',
         address: member.address || '',
@@ -274,7 +274,7 @@ export default function EditMemberPage() {
               <CardContent className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="phone" className="text-slate-300">Phone Number *</Label>
+                    <Label htmlFor="phone" className="text-slate-300">Phone Number</Label>
                     <Input
                       id="phone"
                       className="border-slate-800 bg-slate-950 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500"

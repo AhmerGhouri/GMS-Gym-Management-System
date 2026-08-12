@@ -113,6 +113,7 @@ export default function BulkImportPage() {
           address: row['Address'] || row.address || undefined,
           emergencyContact: row['Emergency Contact'] || row.emergencyContact ? String(row['Emergency Contact'] || row.emergencyContact) : undefined,
           timeSlot: row['Time Slot'] || row.timeSlot || undefined,
+          planId: row['Membership'] || row.planId || undefined,
           joiningDate: row['Joining Date'] || row.joiningDate ? parseDate(row['Joining Date'] || row.joiningDate) : undefined,
         })).filter(row => row.firstName); // Basic validation: require names
 
@@ -306,7 +307,7 @@ export default function BulkImportPage() {
                 </div>
               </div>
               
-              {importResult.errors.length > 0 && (
+              {importResult?.errors?.length > 0 && (
                 <div className="p-0">
                   <Table>
                     <TableHeader>

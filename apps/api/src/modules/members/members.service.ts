@@ -34,9 +34,15 @@ export class MembersService {
       }
     }
 
-    // Generate Member ID (e.g., GMS-0001)
-    const count = await this.prisma.member.count();
-    const memberId = generateMemberId(count + 1);
+    // Find the highest existing member_id sequence to avoid collisions
+    const lastMember = await this.prisma.member.findFirst({
+      orderBy: { memberId: 'desc' },
+      select: { memberId: true },
+    });
+    const lastSeq = lastMember
+      ? parseInt(lastMember.memberId.replace('GMS-', ''), 10) || 0
+      : 0;
+    const memberId = generateMemberId(lastSeq + 1);
 
     const { planId, joiningDate, includeAdmissionFee, admissionFeeType, manualAdmissionFee, activityIds, ...memberData } = dto;
 

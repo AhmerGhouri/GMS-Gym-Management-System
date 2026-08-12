@@ -364,7 +364,7 @@ export default function NewMemberPage() {
                 <CardContent className="space-y-4">
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="phone" className="text-slate-700 dark:text-slate-300">Phone Number *</Label>
+                      <Label htmlFor="phone" className="text-slate-700 dark:text-slate-300">Phone Number</Label>
                       <Input
                         id="phone"
                         placeholder="0300-1234567"

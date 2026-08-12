@@ -186,6 +186,8 @@ export default function MembershipsPage() {
     queryKey: ['membership-plans'],
     queryFn: async () => {
       const res = await api.get('/memberships/plans');
+      
+      console.log("Membership" , res.data)
       return res.data;
     },
   });
@@ -194,12 +196,15 @@ export default function MembershipsPage() {
     queryKey: ['memberships'],
     queryFn: async () => {
       const res = await api.get('/memberships');
+      console.log("Plansss" , res.data)
       return res.data;
     },
   });
 
   const plans = plansData?.data || [];
+  console.log('Plan ID' , plans)
   const memberships = membershipsData?.data || [];
+  console.log
   const visibleMemberships = memberIdFilter
     ? memberships.filter((membership: any) => membership.memberId === memberIdFilter)
     : memberships;
@@ -268,6 +273,7 @@ export default function MembershipsPage() {
                           <DropdownMenuItem
                             className="hover:bg-slate-800 hover:text-white cursor-pointer text-destructive"
                             onClick={async () => {
+                              
                               if (confirm('Delete this plan?')) {
                                 try {
                                   await api.delete(`/memberships/plans/${plan.id}`);

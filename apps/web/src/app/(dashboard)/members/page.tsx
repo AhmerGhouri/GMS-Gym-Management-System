@@ -42,6 +42,69 @@ export default function MembersPage() {
   const [planId, setPlanId] = useState<string | undefined>();
   const [joiningDateFrom, setJoiningDateFrom] = useState('');
   const [joiningDateTo, setJoiningDateTo] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const res = await api.get<ApiResponse<PaginatedResult<Member>>>('/members', {
+        params: { 
+          page: 1, 
+          limit: 10000, 
+          search: search || undefined, 
+          status: statusFilter === 'all' ? undefined : statusFilter, 
+          gender, 
+          timeSlot, 
+          planId, 
+          joiningDateFrom: joiningDateFrom || undefined, 
+          joiningDateTo: joiningDateTo || undefined 
+        },
+      });
+      
+      const allMembers = Array.isArray(res.data?.data) ? res.data.data : [];
+      if (allMembers.length === 0) {
+        toast({ title: 'Export Failed', description: 'No members found to export.', variant: 'destructive' });
+        return;
+      }
+
+      const csvRows = [];
+      const headers = ['Member ID', 'First Name', 'Last Name', 'Gender', 'Phone', 'CNIC', 'Status', 'Joining Date', 'Time Slot'];
+      csvRows.push(headers.join(','));
+
+      for (const m of allMembers) {
+        const row = [
+          m.memberId,
+          `"${m.firstName || ''}"`,
+          `"${m.lastName || ''}"`,
+          m.gender || '',
+          m.phone || '',
+          m.cnic || '',
+          m.status || '',
+          m.joiningDate ? new Date(m.joiningDate).toLocaleDateString() : '',
+          m.timeSlot || ''
+        ];
+        csvRows.push(row.join(','));
+      }
+
+      const csvData = csvRows.join('\n');
+      const blob = new Blob([csvData], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.setAttribute('hidden', '');
+      a.setAttribute('href', url);
+      a.setAttribute('download', `members_export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      toast({ title: 'Export Successful', description: `Exported ${allMembers.length} members.` });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({ title: 'Export Failed', description: 'An error occurred while exporting members.', variant: 'destructive' });
+    } finally {
+      setIsExporting(false);
+    }
+  };
   
   const { data: slotsData } = useQuery({ 
     queryKey: ['gym-slots'], 
@@ -95,8 +158,14 @@ export default function MembersPage() {
               <FileDown className="mr-2 h-4 w-4" /> Bulk Import
             </Button>
           </Link>
-          <Button variant="outline" className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-sm">
-            <FileDown className="mr-2 h-4 w-4" /> Export
+          <Button 
+            variant="outline" 
+            onClick={handleExport}
+            disabled={isExporting}
+            className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-sm"
+          >
+            <FileDown className={`mr-2 h-4 w-4 ${isExporting ? 'animate-pulse' : ''}`} /> 
+            {isExporting ? 'Exporting...' : 'Export'}
           </Button>
           <Link href="/members/new">
             <Button className="bg-cyan-600 text-white hover:bg-cyan-500 shadow-md hover:shadow-lg transition-all">
@@ -220,7 +289,8 @@ export default function MembersPage() {
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-100 dark:bg-cyan-900/30 text-sm font-medium text-cyan-700 dark:text-cyan-400">
-                          {member.firstName[0]}{member.lastName[0]}
+                          {member.firstName[0]}
+                          {/* {member.lastName[0]} */}
                         </div>
                         <div>
                           <Link href={`/members/${member.id}`} className="font-medium text-slate-900 dark:text-white hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">
