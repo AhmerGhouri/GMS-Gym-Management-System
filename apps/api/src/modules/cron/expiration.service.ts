@@ -46,25 +46,34 @@ export class ExpirationService {
               data: { status: 'EXPIRED' },
             });
 
-            // 2. Create a PENDING payment for the next billing cycle
-            const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-            const planPrice = membership.planPrice;
-
-            await prisma.payment.create({
-              data: {
-                invoiceNumber,
-                memberId: membership.memberId,
+            // 2. Create a PENDING payment for the next billing cycle if not already created
+            const existingPending = await prisma.payment.findFirst({
+              where: {
                 membershipId: membership.id,
-                amount: planPrice,
-                discount: 0,
-                totalAmount: planPrice,
-                paidAmount: 0,
-                remainingDue: planPrice,
-                paymentMethod: 'CASH',
                 paymentStatus: 'PENDING',
-                paidAt: new Date(),
               },
             });
+
+            if (!existingPending) {
+              const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+              const planPrice = membership.planPrice;
+
+              await prisma.payment.create({
+                data: {
+                  invoiceNumber,
+                  memberId: membership.memberId,
+                  membershipId: membership.id,
+                  amount: planPrice,
+                  discount: 0,
+                  totalAmount: planPrice,
+                  paidAmount: 0,
+                  remainingDue: planPrice,
+                  paymentMethod: 'CASH',
+                  paymentStatus: 'PENDING',
+                  paidAt: new Date(),
+                },
+              });
+            }
 
             // 3. Update member status if they have no other active memberships
             const otherActive = await prisma.membership.findFirst({
@@ -109,38 +118,49 @@ export class ExpirationService {
         }
       }
     }
-
-    // Also generate PENDING payments for members with recurring unpaid months
-    await this.generateMonthlyPendingPayments(now);
   }
 
-  /**
-   * For expired memberships, keep generating monthly PENDING payment records
-   * until admin marks the previous one as PAID.
-   */
-  private async generateMonthlyPendingPayments(now: Date) {
-    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  // Run at 1 AM every day to generate upcoming invoices 3 days before expiration
+  @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  async handleUpcomingExpirations() {
+    this.logger.log('Running daily upcoming expiration job (3 days before)...');
+    
+    const targetDateStart = new Date();
+    targetDateStart.setDate(targetDateStart.getDate() + 3);
+    targetDateStart.setHours(0, 0, 0, 0);
 
-    const expiredMemberships = await this.prisma.membership.findMany({
-      where: { status: 'EXPIRED' },
+    const targetDateEnd = new Date(targetDateStart);
+    targetDateEnd.setHours(23, 59, 59, 999);
+
+    const upcomingMemberships = await this.prisma.membership.findMany({
+      where: {
+        status: 'ACTIVE',
+        endDate: {
+          gte: targetDateStart,
+          lte: targetDateEnd,
+        },
+      },
       include: { plan: true },
     });
 
-    for (const membership of expiredMemberships) {
+    if (upcomingMemberships.length === 0) {
+      this.logger.log('No upcoming memberships expiring in 3 days.');
+      return;
+    }
+
+    this.logger.log(`Found ${upcomingMemberships.length} memberships expiring in 3 days.`);
+
+    for (const membership of upcomingMemberships) {
       try {
-        const existingMonthlyPayment = await this.prisma.payment.findFirst({
+        // Check if we already created a pending payment recently
+        const existingPending = await this.prisma.payment.findFirst({
           where: {
             membershipId: membership.id,
             paymentStatus: 'PENDING',
-            paidAt: {
-              gte: currentMonthStart,
-              lt: nextMonthStart,
-            },
           },
         });
 
-        if (!existingMonthlyPayment) {
+        if (!existingPending) {
           const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
           const planPrice = membership.planPrice;
 
@@ -156,15 +176,16 @@ export class ExpirationService {
               remainingDue: planPrice,
               paymentMethod: 'CASH',
               paymentStatus: 'PENDING',
-              paidAt: now,
+              paidAt: targetDateStart,
             },
           });
 
-          this.logger.log(`Generated monthly PENDING payment for expired membership ${membership.id}`);
+          this.logger.log(`Generated upcoming PENDING invoice for membership ${membership.id}`);
         }
       } catch (error) {
-        this.logger.error(`Failed to generate monthly payment for membership ${membership.id}: ${(error as Error).message}`);
+        this.logger.error(`Failed to generate upcoming invoice for membership ${membership.id}: ${(error as Error).message}`);
       }
     }
   }
+
 }

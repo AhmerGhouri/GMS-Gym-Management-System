@@ -478,6 +478,7 @@ export default function MemberDetailPage() {
                       <TableHeader>
                         <TableRow className="border-slate-200 dark:border-slate-800">
                           <TableHead className="text-slate-600 dark:text-slate-400">Plan</TableHead>
+                          <TableHead className="text-slate-600 dark:text-slate-400">Joining Date</TableHead>
                           <TableHead className="text-slate-600 dark:text-slate-400">Start Date</TableHead>
                           <TableHead className="text-slate-600 dark:text-slate-400">End Date</TableHead>
                           <TableHead className="text-slate-600 dark:text-slate-400">Status</TableHead>
@@ -489,6 +490,7 @@ export default function MemberDetailPage() {
                         {memberships.map((ms: any) => (
                           <TableRow key={ms.id} className="border-slate-200 dark:border-slate-800">
                             <TableCell className="text-slate-900 dark:text-white font-medium">{ms.plan?.name || 'N/A'}</TableCell>
+                            <TableCell className="text-slate-700 dark:text-slate-300">{formatDate(member.joiningDate)}</TableCell>
                             <TableCell className="text-slate-700 dark:text-slate-300">{formatDate(ms.startDate)}</TableCell>
                             <TableCell className="text-slate-700 dark:text-slate-300">{formatDate(ms.endDate)}</TableCell>
                             <TableCell>{getMembershipStatusBadge(ms.status)}</TableCell>

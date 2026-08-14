@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Save, Building2, Clock, Bell, Users, Shield } from 'lucide-react';
+import { useAuthStore } from '@/lib/stores/auth.store';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,10 @@ import { toast } from '@/components/ui/use-toast';
 import { api } from '@/lib/api/axios';
 
 export default function SettingsPage() {
+  const user = useAuthStore((state) => state.user);
+  
+  const hasUsersAccess = user?.role === 'SUPER_ADMIN' || user?.customRole?.permissions?.includes('users.view');
+
   const [gymName, setGymName] = useState('IronPulse Gym');
   const [gymAddress, setGymAddress] = useState('Block B, DHA Phase 5, Lahore, Pakistan');
   const [gymPhone, setGymPhone] = useState('042-35761234');
@@ -38,6 +43,24 @@ export default function SettingsPage() {
   const { data: settingsData } = useQuery({ queryKey: ['settings'], queryFn: async () => (await api.get('/settings')).data });
   const { data: slotsData } = useQuery({ queryKey: ['gym-slots'], queryFn: async () => (await api.get('/settings/slots')).data });
   const { data: usersData, refetch: refetchUsers } = useQuery({ queryKey: ['users'], queryFn: async () => (await api.get('/users')).data });
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  const handleBulkDelete = async () => {
+    if (selectedUsers.length === 0) return;
+    if (!confirm(`Are you sure you want to permanently delete ${selectedUsers.length} users?`)) return;
+    setIsBulkDeleting(true);
+    try {
+      await api.post('/users/bulk-delete', { ids: selectedUsers });
+      toast({ title: 'Success', description: 'Users deleted successfully.', variant: 'success' });
+      setSelectedUsers([]);
+      refetchUsers();
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to delete users.', variant: 'destructive' });
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
 
   useEffect(() => {
     const values = Object.fromEntries((settingsData?.data || []).map((setting: any) => [setting.key, setting.value]));
@@ -101,7 +124,7 @@ export default function SettingsPage() {
         <TabsList className="bg-slate-800/50">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
+          {hasUsersAccess && <TabsTrigger value="users">Users</TabsTrigger>}
           <TabsTrigger value="security">Security</TabsTrigger>
         </TabsList>
 
@@ -247,7 +270,8 @@ export default function SettingsPage() {
         </TabsContent>
 
         {/* Users Tab */}
-        <TabsContent value="users">
+        {hasUsersAccess && (
+          <TabsContent value="users">
           <Card className="border-slate-800 bg-slate-900/50">
             <CardHeader className="flex flex-row items-center justify-between">
               <div className="flex items-center gap-2">
@@ -267,10 +291,33 @@ export default function SettingsPage() {
                 </Link>
               </div>
             </CardHeader>
+            {selectedUsers.length > 0 && (
+              <div className="bg-rose-500/10 border-y border-slate-800 px-6 py-3 flex items-center justify-between">
+                <span className="text-sm font-medium text-rose-400">
+                  {selectedUsers.length} users selected
+                </span>
+                <Button 
+                  size="sm" 
+                  variant="destructive" 
+                  onClick={handleBulkDelete} 
+                  disabled={isBulkDeleting}
+                >
+                  Delete Selected
+                </Button>
+              </div>
+            )}
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12 text-center">
+                      <input
+                        type="checkbox"
+                        className="rounded border-slate-700 bg-slate-900 w-4 h-4 cursor-pointer"
+                        checked={users.length > 0 && selectedUsers.length === users.length}
+                        onChange={(e) => setSelectedUsers(e.target.checked ? users.map((u: any) => u.id) : [])}
+                      />
+                    </TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
@@ -281,6 +328,17 @@ export default function SettingsPage() {
                 <TableBody>
                   {users.map((user: any) => (
                     <TableRow key={user.id}>
+                      <TableCell className="text-center">
+                        <input
+                          type="checkbox"
+                          className="rounded border-slate-700 bg-slate-900 w-4 h-4 cursor-pointer"
+                          checked={selectedUsers.includes(user.id)}
+                          onChange={(e) => setSelectedUsers(e.target.checked 
+                            ? [...selectedUsers, user.id]
+                            : selectedUsers.filter(id => id !== user.id)
+                          )}
+                        />
+                      </TableCell>
                       <TableCell className="text-white font-medium">{user.firstName} {user.lastName}</TableCell>
                       <TableCell className="text-slate-300">{user.email}</TableCell>
                       <TableCell>
@@ -305,10 +363,11 @@ export default function SettingsPage() {
                           <Button size="sm" variant="ghost">Edit</Button>
                         </Link>
                         {user.isActive ? (
-                          <Button size="sm" variant="ghost" className="text-rose-400" onClick={async () => { if (confirm(`Deactivate ${user.email}?`)) { await api.delete(`/users/${user.id}`); refetchUsers(); } }}>Deactivate</Button>
+                          <Button size="sm" variant="ghost" className="text-amber-400" onClick={async () => { if (confirm(`Deactivate ${user.email}?`)) { await api.patch(`/users/${user.id}`, { isActive: false }); refetchUsers(); } }}>Deactivate</Button>
                         ) : (
                           <Button size="sm" variant="ghost" className="text-emerald-400" onClick={async () => { await api.patch(`/users/${user.id}`, { isActive: true }); refetchUsers(); }}>Activate</Button>
                         )}
+                        <Button size="sm" variant="ghost" className="text-rose-400" onClick={async () => { if (confirm(`Permanently delete ${user.email}?`)) { await api.delete(`/users/${user.id}`); refetchUsers(); } }}>Delete</Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -317,6 +376,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
 
         {/* Security Tab */}
         <TabsContent value="security">

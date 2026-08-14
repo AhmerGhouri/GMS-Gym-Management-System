@@ -25,6 +25,8 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'payments.manage', label: 'Manage Payments', group: 'Payments' },
   { id: 'settings.view', label: 'View Settings', group: 'Settings' },
   { id: 'settings.manage', label: 'Manage Settings', group: 'Settings' },
+  { id: 'reports.view', label: 'View Reports', group: 'Reports' },
+  { id: 'reports.manage', label: 'Manage Reports', group: 'Reports' },
 ];
 
 export default function RolesPage() {

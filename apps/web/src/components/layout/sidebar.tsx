@@ -36,9 +36,31 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const logout = useAuthStore((state) => state.logout);
+  const { user, logout } = useAuthStore();
   const { isSidebarOpen, setSidebarOpen } = useUiStore();
   const router = useRouter();
+
+  // Filter navigation based on user permissions
+  const navItems = navigation.filter(item => {
+    if (!user) return false;
+    if (user.role === 'SUPER_ADMIN') return true;
+    
+    const perms = Array.isArray(user.customRole?.permissions) ? user.customRole.permissions : [];
+    
+    const reqPermMap: Record<string, string> = {
+      '/members': 'members.view',
+      '/memberships': 'plans.view',
+      '/settings': 'settings.view',
+      '/payments': 'payments.view',
+      '/users': 'users.view',
+      '/reports': 'reports.view',
+    };
+    
+    const reqPerm = reqPermMap[item.href];
+    if (!reqPerm) return true;
+    
+    return perms.includes(reqPerm);
+  });
 
   const sidebarContent = (
     <div className="flex h-full flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 shadow-xl lg:shadow-none">
@@ -57,7 +79,7 @@ export function Sidebar() {
 
       <div className="flex-1 overflow-y-auto py-4">
         <nav className="space-y-1 px-3">
-          {navigation.map((item) => {
+          {navItems.map((item) => {
             const isActive = pathname.startsWith(item.href);
             return (
               <Link

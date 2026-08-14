@@ -149,11 +149,11 @@ export default function BulkImportPage() {
   };
 
   const parseGender = (val: string): Gender => {
-    if (!val) return 'MALE';
+    if (!val) return Gender.MALE;
     const lower = val.toLowerCase();
-    if (lower.startsWith('f')) return 'FEMALE';
-    if (lower.startsWith('o')) return 'OTHER';
-    return 'MALE';
+    if (lower.startsWith('f')) return Gender.FEMALE;
+    if (lower.startsWith('o')) return Gender.OTHER;
+    return Gender.MALE;
   };
 
   const parseDate = (val: any): string | undefined => {
@@ -202,7 +202,7 @@ export default function BulkImportPage() {
       toast({
         title: 'Import completed',
         description: `Successfully imported ${res.data.successful} members.`,
-        variant: res.data.failed > 0 ? 'warning' : 'success',
+        variant: res.data.failed > 0 ? 'default' : 'success',
       });
     } catch (error: any) {
       toast({

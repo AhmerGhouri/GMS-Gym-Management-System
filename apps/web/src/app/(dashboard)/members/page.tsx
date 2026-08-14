@@ -43,6 +43,25 @@ export default function MembersPage() {
   const [joiningDateFrom, setJoiningDateFrom] = useState('');
   const [joiningDateTo, setJoiningDateTo] = useState('');
   const [isExporting, setIsExporting] = useState(false);
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [isBulkActing, setIsBulkActing] = useState(false);
+
+  const handleBulkAction = async (action: 'DELETE' | 'ACTIVE' | 'INACTIVE' | 'FROZEN') => {
+    if (selectedMembers.length === 0) return;
+    if (action === 'DELETE' && !confirm(`Are you sure you want to delete ${selectedMembers.length} members?`)) return;
+
+    setIsBulkActing(true);
+    try {
+      await api.post('/members/bulk-action', { memberIds: selectedMembers, action });
+      toast({ title: 'Success', description: `Successfully updated ${selectedMembers.length} members.`, variant: 'success' });
+      setSelectedMembers([]);
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to perform bulk action.', variant: 'destructive' });
+    } finally {
+      setIsBulkActing(false);
+    }
+  };
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -247,14 +266,37 @@ export default function MembersPage() {
           </div>
         </div>
 
+        {selectedMembers.length > 0 && (
+          <div className="bg-cyan-50 dark:bg-cyan-900/20 border-b border-slate-200 dark:border-slate-800 p-3 flex items-center justify-between">
+            <span className="text-sm font-medium text-cyan-800 dark:text-cyan-200">
+              {selectedMembers.length} members selected
+            </span>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" className="border-cyan-200 dark:border-cyan-800" onClick={() => handleBulkAction('ACTIVE')} disabled={isBulkActing}>Set Active</Button>
+              <Button size="sm" variant="outline" className="border-cyan-200 dark:border-cyan-800" onClick={() => handleBulkAction('INACTIVE')} disabled={isBulkActing}>Set Inactive</Button>
+              <Button size="sm" variant="outline" className="border-cyan-200 dark:border-cyan-800" onClick={() => handleBulkAction('FROZEN')} disabled={isBulkActing}>Freeze</Button>
+              <Button size="sm" variant="destructive" onClick={() => handleBulkAction('DELETE')} disabled={isBulkActing}>Delete</Button>
+            </div>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="border-slate-200 dark:border-slate-800 hover:bg-transparent">
+                <TableHead className="w-12 text-center">
+                  <input
+                    type="checkbox"
+                    className="rounded border-slate-300 dark:border-slate-700 w-4 h-4 cursor-pointer"
+                    checked={members.length > 0 && selectedMembers.length === members.length}
+                    onChange={(e) => setSelectedMembers(e.target.checked ? members.map((m: any) => m.id) : [])}
+                  />
+                </TableHead>
                 <TableHead className="text-slate-600 dark:text-slate-400">Member</TableHead>
                 <TableHead className="text-slate-600 dark:text-slate-400">Contact</TableHead>
                 <TableHead className="text-slate-600 dark:text-slate-400">Joined</TableHead>
                 <TableHead className="text-slate-600 dark:text-slate-400">Membership Plan</TableHead>
+                <TableHead className="text-slate-600 dark:text-slate-400">Membership Expiry</TableHead>
                 <TableHead className="text-slate-600 dark:text-slate-400">Time Slot</TableHead>
                 <TableHead className="text-slate-600 dark:text-slate-400">Status</TableHead>
                 <TableHead className="text-right text-slate-600 dark:text-slate-400">Actions</TableHead>
@@ -272,7 +314,7 @@ export default function MembersPage() {
                 </TableRow>
               ) : members.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-32 text-center text-slate-500">
+                  <TableCell colSpan={8} className="h-32 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center">
                       <Search className="h-8 w-8 text-slate-300 dark:text-slate-600 mb-2" />
                       <p>No members found.</p>
@@ -284,8 +326,19 @@ export default function MembersPage() {
                 members.map((member, i) => (
                   <TableRow 
                     key={member.id} 
-                    className="border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
+                    className={`border-slate-200 dark:border-slate-800 transition-colors ${selectedMembers.includes(member.id) ? 'bg-cyan-50/50 dark:bg-cyan-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-900'}`}
                   >
+                    <TableCell className="text-center">
+                      <input
+                        type="checkbox"
+                        className="rounded border-slate-300 dark:border-slate-700 w-4 h-4 cursor-pointer"
+                        checked={selectedMembers.includes(member.id)}
+                        onChange={(e) => setSelectedMembers(e.target.checked 
+                          ? [...selectedMembers, member.id]
+                          : selectedMembers.filter(id => id !== member.id)
+                        )}
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-100 dark:bg-cyan-900/30 text-sm font-medium text-cyan-700 dark:text-cyan-400">
@@ -309,6 +362,9 @@ export default function MembersPage() {
                     </TableCell>
                     <TableCell className="text-sm text-slate-700 dark:text-slate-300">
                       {(member as any).activeMembership?.plan?.name || <span className="text-slate-400 dark:text-slate-500 italic">No active plan</span>}
+                    </TableCell>
+                    <TableCell className="text-sm text-slate-700 dark:text-slate-300">
+                      {(member as any).activeMembership?.endDate ? formatDate((member as any).activeMembership.endDate) : <span className="text-slate-400 dark:text-slate-500">—</span>}
                     </TableCell>
                     <TableCell className="text-sm text-slate-700 dark:text-slate-300">{(member as any).timeSlot || '—'}</TableCell>
                     <TableCell>

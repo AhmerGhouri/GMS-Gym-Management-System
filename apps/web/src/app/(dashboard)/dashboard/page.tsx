@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { api } from '@/lib/api/axios';
 import { useQuery } from '@tanstack/react-query';
 import { formatCurrency } from '@gms/utils';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { motion } from 'framer-motion';
 import {
@@ -23,7 +24,9 @@ import {
   ShieldAlert,
   Activity,
   WifiOff,
-  Clock
+  Clock,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import {
   AreaChart,
@@ -70,6 +73,10 @@ const activityBgColors: Record<string, string> = {
 export default function DashboardPage() {
   const user = useAuthStore((state) => state.user);
   const { theme } = useTheme();
+  const [isPrivacyMode, setIsPrivacyMode] = useState(true);
+
+  const hasReportsAccess = user?.role === 'SUPER_ADMIN' || user?.customRole?.permissions?.includes('reports.view');
+
 
   const { data: statsData, isLoading: isStatsLoading } = useQuery({
     queryKey: ['dashboard', 'stats'],
@@ -109,7 +116,7 @@ export default function DashboardPage() {
   const statCards = [
     {
       title: 'Total Members',
-      value: stats.totalMembers?.toString(),
+      value: isPrivacyMode ? '***' : stats.totalMembers?.toString(),
       icon: Users,
       change: change(stats.changes?.totalMembers),
       trend: 'up' as const,
@@ -119,7 +126,7 @@ export default function DashboardPage() {
     },
     {
       title: "Today's Attendance",
-      value: stats.todayAttendance?.toString(),
+      value: isPrivacyMode ? '***' : stats.todayAttendance?.toString(),
       icon: CalendarDays,
       change: change(stats.changes?.todayAttendance),
       trend: 'up' as const,
@@ -127,16 +134,16 @@ export default function DashboardPage() {
       bg: 'bg-violet-100 dark:bg-violet-500/10',
       href: '/attendance',
     },
-    {
+    ...(hasReportsAccess ? [{
       title: 'Monthly Revenue',
-      value: formatCurrency(stats.monthlyRevenue || 0),
+      value: isPrivacyMode ? '***' : formatCurrency(stats.monthlyRevenue || 0),
       icon: DollarSign,
       change: change(stats.changes?.monthlyRevenue),
       trend: 'up' as const,
       color: 'text-emerald-600 dark:text-emerald-500',
       bg: 'bg-emerald-100 dark:bg-emerald-500/10',
       href: '/reports',
-    },
+    }] : []),
     {
       title: 'Expired Memberships',
       value: stats.expiredMembers?.toString(),
@@ -207,14 +214,26 @@ export default function DashboardPage() {
         initial={{ opacity: 0, y: -20 }} 
         animate={{ opacity: 1, y: 0 }} 
         transition={{ duration: 0.3 }}
+        className="flex items-start justify-between"
       >
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Dashboard</h1>
-        <p className="text-slate-600 dark:text-slate-400">
-          Welcome back{user?.firstName ? `, ${user.firstName}` : ''}. Here is what is happening today.
-        </p>
-        <div className="mt-2 flex gap-3 text-sm">
-          <Link href="/members?gender=MALE" className="text-cyan-600 dark:text-cyan-400 hover:opacity-80">Male: {stats.maleMembers || 0}</Link>
-          <Link href="/members?gender=FEMALE" className="text-violet-600 dark:text-violet-400 hover:opacity-80">Female: {stats.femaleMembers || 0}</Link>
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Dashboard</h1>
+            <button
+              onClick={() => setIsPrivacyMode(!isPrivacyMode)}
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors p-1"
+              title={isPrivacyMode ? "Show values" : "Hide values"}
+            >
+              {isPrivacyMode ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
+          </div>
+          <p className="text-slate-600 dark:text-slate-400 mt-1">
+            Welcome back{user?.firstName ? `, ${user.firstName}` : ''}. Here is what is happening today.
+          </p>
+          <div className="mt-2 flex gap-3 text-sm">
+            <Link href="/members?gender=MALE" className="text-cyan-600 dark:text-cyan-400 hover:opacity-80">Male: {isPrivacyMode ? '***' : (stats.maleMembers || 0)}</Link>
+            <Link href="/members?gender=FEMALE" className="text-violet-600 dark:text-violet-400 hover:opacity-80">Female: {isPrivacyMode ? '***' : (stats.femaleMembers || 0)}</Link>
+          </div>
         </div>
       </motion.div>
 

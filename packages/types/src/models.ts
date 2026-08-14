@@ -38,6 +38,11 @@ export interface UserProfile {
   role: UserRole;
   isActive: boolean;
   lastLoginAt: string | null;
+  customRole?: {
+    id: string;
+    name: string;
+    permissions: string[];
+  } | null;
 }
 
 export interface RefreshTokenRequest {

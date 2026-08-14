@@ -2,6 +2,7 @@ import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { UserRole } from '@prisma/client';
 import { ROLES_KEY } from '../decorators/roles.decorator';
+import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -13,8 +14,13 @@ export class RolesGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
 
-    // If no roles are required, allow access
-    if (!requiredRoles || requiredRoles.length === 0) {
+    const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
+      PERMISSIONS_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    // If neither roles nor permissions are required, allow access
+    if ((!requiredRoles || requiredRoles.length === 0) && (!requiredPermissions || requiredPermissions.length === 0)) {
       return true;
     }
 
@@ -29,8 +35,32 @@ export class RolesGuard implements CanActivate {
       return true;
     }
 
-    if (requiredRoles.includes(user.role)) return true;
-    const permissions = Array.isArray(user.customRole?.permissions) ? user.customRole.permissions : [];
-    return requiredRoles.some((role) => permissions.includes(role));
+    // Check roles
+    let hasRole = false;
+    if (requiredRoles && requiredRoles.length > 0) {
+      if (requiredRoles.includes(user.role)) {
+        hasRole = true;
+      }
+    }
+
+    // Check permissions
+    let hasPermission = false;
+    if (requiredPermissions && requiredPermissions.length > 0) {
+      const permissions = Array.isArray(user.customRole?.permissions) ? user.customRole.permissions : [];
+      if (requiredPermissions.some((perm) => permissions.includes(perm))) {
+        hasPermission = true;
+      }
+    }
+
+    // If both are specified, meeting either condition is sufficient. If only one is specified, they must meet that condition.
+    if (requiredRoles?.length && requiredPermissions?.length) {
+      return hasRole || hasPermission;
+    }
+    
+    if (requiredPermissions?.length) {
+      return hasPermission;
+    }
+
+    return hasRole;
   }
 }

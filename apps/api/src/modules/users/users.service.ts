@@ -28,5 +28,6 @@ export class UsersService {
     if (data.password) update.password = await bcrypt.hash(data.password, 12);
     return this.prisma.user.update({ where: { id }, data: update, select: { id: true, email: true, firstName: true, lastName: true, role: true, customRoleId: true, customRole: true, isActive: true } });
   }
-  async remove(id: string) { await this.prisma.user.update({ where: { id }, data: { isActive: false, refreshToken: null } }); return { message: 'User deactivated' }; }
+  async remove(id: string) { await this.prisma.user.delete({ where: { id } }); return { message: 'User deleted' }; }
+  async bulkRemove(ids: string[]) { await this.prisma.user.deleteMany({ where: { id: { in: ids } } }); return { message: 'Users deleted' }; }
 }

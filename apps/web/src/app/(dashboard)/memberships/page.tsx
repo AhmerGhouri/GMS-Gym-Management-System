@@ -212,7 +212,6 @@ export default function MembershipsPage() {
   const getMembershipStatusBadge = (status: MembershipStatus) => {
     switch (status) {
       case 'ACTIVE': return <Badge variant="success">Active</Badge>;
-      case 'INACTIVE': return <Badge variant="secondary">Inactive</Badge>;
       case 'EXPIRED': return <Badge variant="secondary">Expired</Badge>;
       case 'FROZEN': return <Badge className="border-transparent bg-blue-500/15 text-blue-500">Frozen</Badge>;
       case 'SUSPENDED': return <Badge variant="warning">Suspended</Badge>;

@@ -287,4 +287,42 @@ export class MembersService {
     this.logger.log(`Soft deleted member: ${member.memberId}`);
     return { message: 'Member deleted successfully' };
   }
+
+  async bulkAction(memberIds: string[], action: 'DELETE' | 'ACTIVE' | 'INACTIVE' | 'FROZEN') {
+    const statusMap = {
+      DELETE: 'DELETED',
+      ACTIVE: 'ACTIVE',
+      INACTIVE: 'INACTIVE',
+      FROZEN: 'FROZEN',
+    };
+
+    const newStatus = statusMap[action];
+
+    if (!newStatus) {
+      throw new BadRequestException('Invalid bulk action');
+    }
+
+    await this.prisma.member.updateMany({
+      where: { id: { in: memberIds } },
+      data: { status: newStatus as any },
+    });
+
+    // Optional: Sync ZKTeco devices if needed based on status changes
+    const members = await this.prisma.member.findMany({
+      where: { id: { in: memberIds } },
+      select: { memberId: true },
+    });
+    
+    for (const member of members) {
+      if (newStatus === 'DELETED' || newStatus === 'INACTIVE' || newStatus === 'FROZEN') {
+        await this.zkUser.enqueueDisableOnAllDevices(member.memberId);
+      } else if (newStatus === 'ACTIVE') {
+        // Enqueue enable or sync logic if needed
+      }
+    }
+
+    this.logger.log(`Bulk action ${action} performed on ${memberIds.length} members`);
+    return { message: `Successfully updated ${memberIds.length} members` };
+  }
 }
+
