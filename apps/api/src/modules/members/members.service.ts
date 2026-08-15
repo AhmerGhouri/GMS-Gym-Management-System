@@ -229,6 +229,27 @@ export class MembersService {
         data: updateData,
       });
 
+      if (dto.joiningDate) {
+        const activeMembership = await tx.membership.findFirst({
+          where: { memberId: id, status: 'ACTIVE' },
+          orderBy: { createdAt: 'desc' }
+        });
+        
+        if (activeMembership) {
+          const newStartDate = new Date(dto.joiningDate);
+          const newEndDate = new Date(newStartDate);
+          newEndDate.setMonth(newEndDate.getMonth() + 1);
+          
+          await tx.membership.update({
+            where: { id: activeMembership.id },
+            data: {
+              startDate: newStartDate,
+              endDate: newEndDate,
+            }
+          });
+        }
+      }
+
       if (activityIds !== undefined) {
         const activeMembership = await tx.membership.findFirst({
           where: { memberId: id, status: 'ACTIVE', endDate: { gte: new Date() } },
