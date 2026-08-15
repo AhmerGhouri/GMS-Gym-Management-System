@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Dumbbell, Loader2 } from 'lucide-react';
+import { Dumbbell, Loader2, Eye, EyeOff } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,7 @@ export default function LoginPage() {
   const setAuth = useAuthStore((state) => state.setAuth);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -117,13 +118,22 @@ export default function LoginPage() {
                   Forgot password?
                 </Link>
               </div>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Admin@123"
-                className="border-slate-800 bg-slate-950 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500"
-                {...register('password')}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Admin@123"
+                  className="border-slate-800 bg-slate-950 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500 pr-10"
+                  {...register('password')}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 focus:outline-none"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               {errors.password && (
                 <p className="text-xs text-destructive">{errors.password.message}</p>
               )}

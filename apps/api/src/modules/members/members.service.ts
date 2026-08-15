@@ -115,13 +115,16 @@ export class MembersService {
     }
 
     if (filter.search) {
-      where.OR = [
-        { memberId: { contains: filter.search, mode: 'insensitive' } },
-        { firstName: { contains: filter.search, mode: 'insensitive' } },
-        { lastName: { contains: filter.search, mode: 'insensitive' } },
-        { phone: { contains: filter.search } },
-        { cnic: { contains: filter.search } },
-      ];
+      const terms = filter.search.trim().split(/\s+/);
+      where.AND = terms.map(term => ({
+        OR: [
+          { memberId: { contains: term, mode: 'insensitive' } },
+          { firstName: { contains: term, mode: 'insensitive' } },
+          { lastName: { contains: term, mode: 'insensitive' } },
+          { phone: { contains: term } },
+          { cnic: { contains: term } },
+        ]
+      }));
     }
 
     const [total, items] = await Promise.all([
