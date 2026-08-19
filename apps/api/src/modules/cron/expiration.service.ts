@@ -120,13 +120,13 @@ export class ExpirationService {
     }
   }
 
-  // Run at 1 AM every day to generate upcoming invoices 3 days before expiration
+  // Run at 1 AM every day to generate upcoming invoices 7 days before expiration
   @Cron(CronExpression.EVERY_DAY_AT_1AM)
   async handleUpcomingExpirations() {
-    this.logger.log('Running daily upcoming expiration job (3 days before)...');
+    this.logger.log('Running daily upcoming expiration job (7 days before)...');
     
     const targetDateStart = new Date();
-    targetDateStart.setDate(targetDateStart.getDate() + 3);
+    targetDateStart.setDate(targetDateStart.getDate() + 7);
     targetDateStart.setHours(0, 0, 0, 0);
 
     const targetDateEnd = new Date(targetDateStart);
@@ -144,11 +144,11 @@ export class ExpirationService {
     });
 
     if (upcomingMemberships.length === 0) {
-      this.logger.log('No upcoming memberships expiring in 3 days.');
+      this.logger.log('No upcoming memberships expiring in 7 days.');
       return;
     }
 
-    this.logger.log(`Found ${upcomingMemberships.length} memberships expiring in 3 days.`);
+    this.logger.log(`Found ${upcomingMemberships.length} memberships expiring in 7 days.`);
 
     for (const membership of upcomingMemberships) {
       try {

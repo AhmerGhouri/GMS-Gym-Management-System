@@ -67,19 +67,19 @@ export default function MembersPage() {
     setIsExporting(true);
     try {
       const res = await api.get<ApiResponse<PaginatedResult<Member>>>('/members', {
-        params: { 
-          page: 1, 
-          limit: 10000, 
-          search: search || undefined, 
-          status: statusFilter === 'all' ? undefined : statusFilter, 
-          gender, 
-          timeSlot, 
-          planId, 
-          joiningDateFrom: joiningDateFrom || undefined, 
-          joiningDateTo: joiningDateTo || undefined 
+        params: {
+          page: 1,
+          limit: 10000,
+          search: search || undefined,
+          status: statusFilter === 'all' ? undefined : statusFilter,
+          gender,
+          timeSlot,
+          planId,
+          joiningDateFrom: joiningDateFrom || undefined,
+          joiningDateTo: joiningDateTo || undefined
         },
       });
-      
+
       const allMembers = Array.isArray(res.data?.data) ? res.data.data : [];
       if (allMembers.length === 0) {
         toast({ title: 'Export Failed', description: 'No members found to export.', variant: 'destructive' });
@@ -115,7 +115,7 @@ export default function MembersPage() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      
+
       toast({ title: 'Export Successful', description: `Exported ${allMembers.length} members.` });
     } catch (error) {
       console.error('Export error:', error);
@@ -124,10 +124,10 @@ export default function MembersPage() {
       setIsExporting(false);
     }
   };
-  
-  const { data: slotsData } = useQuery({ 
-    queryKey: ['gym-slots'], 
-    queryFn: async () => (await api.get('/settings/slots')).data 
+
+  const { data: slotsData } = useQuery({
+    queryKey: ['gym-slots'],
+    queryFn: async () => (await api.get('/settings/slots')).data
   });
   const slots = slotsData?.data || [];
   const { data: plansData } = useQuery({
@@ -161,14 +161,14 @@ export default function MembersPage() {
 
   return (
     <div className="space-y-6">
-      <motion.div 
+      <motion.div
         className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
       >
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Members</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Members U</h1>
           <p className="text-slate-600 dark:text-slate-400">Manage gym members and their subscriptions.</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
@@ -177,13 +177,13 @@ export default function MembersPage() {
               <FileDown className="mr-2 h-4 w-4" /> Bulk Import
             </Button>
           </Link>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={handleExport}
             disabled={isExporting}
             className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-sm"
           >
-            <FileDown className={`mr-2 h-4 w-4 ${isExporting ? 'animate-pulse' : ''}`} /> 
+            <FileDown className={`mr-2 h-4 w-4 ${isExporting ? 'animate-pulse' : ''}`} />
             {isExporting ? 'Exporting...' : 'Export'}
           </Button>
           <Link href="/members/new">
@@ -194,7 +194,7 @@ export default function MembersPage() {
         </div>
       </motion.div>
 
-      <motion.div 
+      <motion.div
         className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 shadow-sm"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -203,24 +203,23 @@ export default function MembersPage() {
         <div className="space-y-4 border-b border-slate-200 dark:border-slate-800 p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex w-fit rounded-lg bg-slate-100 dark:bg-slate-950 p-1 text-sm shadow-inner">
-            {[
-              { label: 'All Members', href: '/members', value: undefined },
-              { label: 'Male', href: '/members?gender=MALE', value: 'MALE' },
-              { label: 'Female', href: '/members?gender=FEMALE', value: 'FEMALE' },
-            ].map((tab) => (
-              <Link
-                key={tab.label}
-                href={tab.href}
-                className={`rounded-md px-3 py-1.5 transition-all ${
-                  gender === tab.value 
-                    ? 'bg-white dark:bg-cyan-600 text-slate-900 dark:text-white shadow-sm font-medium' 
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-                onClick={() => setPage(1)}
-              >
-                {tab.label}
-              </Link>
-            ))}
+              {[
+                { label: 'All Members', href: '/members', value: undefined },
+                { label: 'Male', href: '/members?gender=MALE', value: 'MALE' },
+                { label: 'Female', href: '/members?gender=FEMALE', value: 'FEMALE' },
+              ].map((tab) => (
+                <Link
+                  key={tab.label}
+                  href={tab.href}
+                  className={`rounded-md px-3 py-1.5 transition-all ${gender === tab.value
+                      ? 'bg-white dark:bg-cyan-600 text-slate-900 dark:text-white shadow-sm font-medium'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  onClick={() => setPage(1)}
+                >
+                  {tab.label}
+                </Link>
+              ))}
             </div>
             <div className="relative w-full lg:max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
@@ -237,32 +236,32 @@ export default function MembersPage() {
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <Select onValueChange={(value) => { setTimeSlot(value === 'all' ? undefined : value); setPage(1); }}>
-            <SelectTrigger className="w-full border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white">
-              <SelectValue placeholder="All slots" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All slots</SelectItem>
-              {slots.map((slot: any) => <SelectItem key={slot.id} value={slot.name}>{slot.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); setPage(1); }}>
-            <SelectTrigger className="w-full border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white"><SelectValue placeholder="Status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="ACTIVE">Active</SelectItem>
-              <SelectItem value="INACTIVE">Inactive</SelectItem>
-              <SelectItem value="SUSPENDED">Suspended</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select onValueChange={(value) => { setPlanId(value === 'all' ? undefined : value); setPage(1); }}>
-            <SelectTrigger className="w-full border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white"><SelectValue placeholder="All plans" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All plans</SelectItem>
-              {plans.map((plan: any) => <SelectItem key={plan.id} value={plan.id}>{plan.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Input type="date" value={joiningDateFrom} onChange={(event) => { setJoiningDateFrom(event.target.value); setPage(1); }} className="w-full border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950" aria-label="Joining date from" />
-          <Input type="date" value={joiningDateTo} onChange={(event) => { setJoiningDateTo(event.target.value); setPage(1); }} className="w-full border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950" aria-label="Joining date to" />
+              <SelectTrigger className="w-full border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white">
+                <SelectValue placeholder="All slots" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All slots</SelectItem>
+                {slots.map((slot: any) => <SelectItem key={slot.id} value={slot.name}>{slot.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); setPage(1); }}>
+              <SelectTrigger className="w-full border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="ACTIVE">Active</SelectItem>
+                <SelectItem value="INACTIVE">Inactive</SelectItem>
+                <SelectItem value="SUSPENDED">Suspended</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select onValueChange={(value) => { setPlanId(value === 'all' ? undefined : value); setPage(1); }}>
+              <SelectTrigger className="w-full border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white"><SelectValue placeholder="All plans" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All plans</SelectItem>
+                {plans.map((plan: any) => <SelectItem key={plan.id} value={plan.id}>{plan.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Input type="date" value={joiningDateFrom} onChange={(event) => { setJoiningDateFrom(event.target.value); setPage(1); }} className="w-full border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950" aria-label="Joining date from" />
+            <Input type="date" value={joiningDateTo} onChange={(event) => { setJoiningDateTo(event.target.value); setPage(1); }} className="w-full border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950" aria-label="Joining date to" />
           </div>
         </div>
 
@@ -324,8 +323,8 @@ export default function MembersPage() {
                 </TableRow>
               ) : (
                 members.map((member, i) => (
-                  <TableRow 
-                    key={member.id} 
+                  <TableRow
+                    key={member.id}
                     className={`border-slate-200 dark:border-slate-800 transition-colors ${selectedMembers.includes(member.id) ? 'bg-cyan-50/50 dark:bg-cyan-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-900'}`}
                   >
                     <TableCell className="text-center">
@@ -333,7 +332,7 @@ export default function MembersPage() {
                         type="checkbox"
                         className="rounded border-slate-300 dark:border-slate-700 w-4 h-4 cursor-pointer"
                         checked={selectedMembers.includes(member.id)}
-                        onChange={(e) => setSelectedMembers(e.target.checked 
+                        onChange={(e) => setSelectedMembers(e.target.checked
                           ? [...selectedMembers, member.id]
                           : selectedMembers.filter(id => id !== member.id)
                         )}
@@ -397,7 +396,7 @@ export default function MembersPage() {
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-800" />
-                          <DropdownMenuItem 
+                          <DropdownMenuItem
                             className="hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer text-rose-500 focus:bg-rose-50 dark:focus:bg-rose-500/10 focus:text-rose-600 dark:focus:text-rose-400"
                             onClick={async () => {
                               if (confirm('Are you sure you want to delete this member?')) {

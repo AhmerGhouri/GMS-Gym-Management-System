@@ -91,18 +91,13 @@ export class PaymentsService {
       if (updatedPayment.membershipId) {
         if (updatedPayment.paymentStatus === PaymentStatus.PAID) {
           const membership = await this.prisma.membership.findUnique({ where: { id: updatedPayment.membershipId }, include: { plan: true } });
-          if (membership && (membership.status === 'EXPIRED' || membership.endDate < new Date())) {
-            const startDate = new Date();
+          if (membership) {
+            const startDate = new Date(membership.endDate);
             const endDate = new Date(startDate);
             endDate.setDate(endDate.getDate() + membership.plan.durationDays);
             await this.prisma.membership.update({
               where: { id: membership.id },
               data: { status: 'ACTIVE', startDate, endDate }
-            });
-          } else {
-            await this.prisma.membership.update({
-              where: { id: updatedPayment.membershipId },
-              data: { status: 'ACTIVE' },
             });
           }
         } else {
