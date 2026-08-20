@@ -12,7 +12,7 @@ export class ExpirationService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly zkUser: ZkUserService,
-  ) {}
+  ) { }
 
   // Run at midnight every day
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
@@ -121,22 +121,20 @@ export class ExpirationService {
   }
 
   // Run at 1 AM every day to generate upcoming invoices 7 days before expiration
-  @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  @Cron(CronExpression.EVERY_MINUTE)
   async handleUpcomingExpirations() {
     this.logger.log('Running daily upcoming expiration job (7 days before)...');
-    
-    const targetDateStart = new Date();
-    targetDateStart.setDate(targetDateStart.getDate() + 7);
-    targetDateStart.setHours(0, 0, 0, 0);
 
-    const targetDateEnd = new Date(targetDateStart);
+    const now = new Date();
+    const targetDateEnd = new Date();
+    targetDateEnd.setDate(targetDateEnd.getDate() + 7);
     targetDateEnd.setHours(23, 59, 59, 999);
 
     const upcomingMemberships = await this.prisma.membership.findMany({
       where: {
         status: 'ACTIVE',
         endDate: {
-          gte: targetDateStart,
+          gt: now,
           lte: targetDateEnd,
         },
       },
@@ -160,6 +158,7 @@ export class ExpirationService {
           },
         });
 
+
         if (!existingPending) {
           const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
           const planPrice = membership.planPrice;
@@ -176,7 +175,7 @@ export class ExpirationService {
               remainingDue: planPrice,
               paymentMethod: 'CASH',
               paymentStatus: 'PENDING',
-              paidAt: targetDateStart,
+              paidAt: now,
             },
           });
 

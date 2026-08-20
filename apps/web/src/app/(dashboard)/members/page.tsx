@@ -168,7 +168,7 @@ export default function MembersPage() {
         transition={{ duration: 0.3 }}
       >
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Members U</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Members</h1>
           <p className="text-slate-600 dark:text-slate-400">Manage gym members and their subscriptions.</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
@@ -212,8 +212,8 @@ export default function MembersPage() {
                   key={tab.label}
                   href={tab.href}
                   className={`rounded-md px-3 py-1.5 transition-all ${gender === tab.value
-                      ? 'bg-white dark:bg-cyan-600 text-slate-900 dark:text-white shadow-sm font-medium'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-white dark:bg-cyan-600 text-slate-900 dark:text-white shadow-sm font-medium'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   onClick={() => setPage(1)}
                 >
