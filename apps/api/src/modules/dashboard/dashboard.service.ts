@@ -10,103 +10,185 @@ export class DashboardService {
     private readonly membershipsService: MembershipsService,
   ) {}
 
-  async getDashboardStats() {
+  async getDashboardStats(month?: number, year?: number) {
     await this.membershipsService.syncExpiredMemberships();
     const now = new Date();
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+    const yesterdayEnd = new Date(todayStart);
+    yesterdayEnd.setMilliseconds(yesterdayEnd.getMilliseconds() - 1);
+
+    // Determine target month and year
+    const targetYear = year ? Number(year) : now.getFullYear();
+    const targetMonthIndex = month ? Number(month) - 1 : now.getMonth();
+
+    const targetMonthStart = new Date(targetYear, targetMonthIndex, 1, 0, 0, 0, 0);
+    const targetMonthEnd = new Date(targetYear, targetMonthIndex + 1, 0, 23, 59, 59, 999);
+
+    const prevMonthStart = new Date(targetYear, targetMonthIndex - 1, 1, 0, 0, 0, 0);
+    const prevMonthEnd = new Date(targetYear, targetMonthIndex, 0, 23, 59, 59, 999);
+
+    const sixMonthsAgo = new Date(targetYear, targetMonthIndex - 5, 1);
     const sevenDaysAgo = new Date(todayStart);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
 
-    const activeMembershipWhere = {
-      status: MembershipStatus.ACTIVE,
-      startDate: { lte: now },
-      endDate: { gte: now },
-      member: { status: MemberStatus.ACTIVE },
-    };
-
-    const [totalMembers, activeMembers, expiredMembers, todayAttendance, activeMembershipsData, payments, recentMemberships, recentAttendance, recentMembers, recentlyExpiredMemberships, maleMembers, femaleMembers] = await Promise.all([
+    const [
+      totalMembers,
+      activeMembers,
+      expiredMembers,
+      maleMembers,
+      femaleMembers,
+      todayAttendance,
+      yesterdayAttendance,
+      monthlyAttendance,
+      monthlyNewMembers,
+      previousMonthNewMembers,
+      monthlyExpiredMembers,
+      previousMonthExpiredMembers,
+      allPayments,
+      monthlyPayments,
+      prevMonthlyPayments,
+      activeMembershipsData,
+      recentAttendance,
+      recentMemberships,
+      recentMembers,
+    ] = await Promise.all([
+      // Total all-time non-deleted members
       this.prisma.member.count({ where: { status: { not: MemberStatus.DELETED } } }),
-      this.prisma.member.count({
-        where: { status: MemberStatus.ACTIVE },
-      }),
+      // Currently active members
+      this.prisma.member.count({ where: { status: MemberStatus.ACTIVE } }),
+      // Expired/Inactive members
       this.prisma.member.count({ where: { status: MemberStatus.INACTIVE } }),
-      this.prisma.attendanceLog.count({ where: { checkIn: { gte: todayStart } } }),
-      // The monthly total represents the value of memberships that are valid today.
-      this.prisma.membership.findMany({
-        where: activeMembershipWhere,
-        include: { plan: true },
+      // Male / Female all-time
+      this.prisma.member.count({ where: { gender: Gender.MALE, status: { not: MemberStatus.DELETED } } }),
+      this.prisma.member.count({ where: { gender: Gender.FEMALE, status: { not: MemberStatus.DELETED } } }),
+      // Attendance
+      this.prisma.attendanceLog.count({ where: { checkIn: { gte: todayStart, lte: todayEnd } } }),
+      this.prisma.attendanceLog.count({ where: { checkIn: { gte: yesterdayStart, lte: yesterdayEnd } } }),
+      this.prisma.attendanceLog.count({ where: { checkIn: { gte: targetMonthStart, lte: targetMonthEnd } } }),
+      // New members in target month vs previous month
+      this.prisma.member.count({
+        where: {
+          createdAt: { gte: targetMonthStart, lte: targetMonthEnd },
+          status: { not: MemberStatus.DELETED },
+        },
       }),
+      this.prisma.member.count({
+        where: {
+          createdAt: { gte: prevMonthStart, lte: prevMonthEnd },
+          status: { not: MemberStatus.DELETED },
+        },
+      }),
+      // Expired members in target month vs previous month
+      this.prisma.membership.count({
+        where: {
+          status: MembershipStatus.EXPIRED,
+          endDate: { gte: targetMonthStart, lte: targetMonthEnd },
+        },
+      }),
+      this.prisma.membership.count({
+        where: {
+          status: MembershipStatus.EXPIRED,
+          endDate: { gte: prevMonthStart, lte: prevMonthEnd },
+        },
+      }),
+      // Payments
       this.prisma.payment.findMany({
         where: { paymentStatus: { not: PaymentStatus.REFUNDED } },
       }),
-      // Membership assignment is the system's billing event. Use it for the revenue
-      // overview so newly registered members appear without waiting for a later
-      // payment-status update.
+      // Payments collected in target month
+      this.prisma.payment.findMany({
+        where: {
+          paidAt: { gte: targetMonthStart, lte: targetMonthEnd },
+          paymentStatus: { in: [PaymentStatus.PAID, PaymentStatus.PARTIAL] },
+        },
+      }),
+      // Payments collected in previous month
+      this.prisma.payment.findMany({
+        where: {
+          paidAt: { gte: prevMonthStart, lte: prevMonthEnd },
+          paymentStatus: { in: [PaymentStatus.PAID, PaymentStatus.PARTIAL] },
+        },
+      }),
+      // Active memberships for plan distribution
       this.prisma.membership.findMany({
         where: {
-          startDate: { gte: sixMonthsAgo },
-          status: { not: MembershipStatus.CANCELLED },
+          status: MembershipStatus.ACTIVE,
+          startDate: { lte: targetMonthEnd },
+          endDate: { gte: targetMonthStart },
         },
         include: { plan: true },
       }),
       this.prisma.attendanceLog.findMany({ where: { checkIn: { gte: sevenDaysAgo } } }),
-      this.prisma.member.findMany({ where: { createdAt: { gte: sixMonthsAgo } } }),
       this.prisma.membership.findMany({
-        where: { status: MembershipStatus.EXPIRED, updatedAt: { gte: new Date(now.getFullYear(), now.getMonth() - 1, 1) } },
-        select: { updatedAt: true },
+        where: {
+          startDate: { gte: sixMonthsAgo, lte: targetMonthEnd },
+          status: { not: MembershipStatus.CANCELLED },
+        },
+        include: { plan: true },
       }),
-      this.prisma.member.count({ where: { gender: Gender.MALE, status: { not: MemberStatus.DELETED } } }),
-      this.prisma.member.count({ where: { gender: Gender.FEMALE, status: { not: MemberStatus.DELETED } } }),
+      this.prisma.member.findMany({
+        where: {
+          createdAt: { gte: sixMonthsAgo, lte: targetMonthEnd },
+          status: { not: MemberStatus.DELETED },
+        },
+      }),
     ]);
 
-    const monthlyRevenue = activeMembershipsData.reduce(
-      (acc, membership) =>
-        acc +
-        Number(membership.planPrice) +
-        (membership.startDate >= monthStart ? Number(membership.admissionFee) : 0),
-      0
-    );
+    // Financial calculations
+    const monthlyRevenue = monthlyPayments.reduce((acc, pay) => acc + Number(pay.paidAmount), 0);
+    const prevMonthRevenue = prevMonthlyPayments.reduce((acc, pay) => acc + Number(pay.paidAmount), 0);
+    const totalRevenue = allPayments
+      .filter((p) => p.paymentStatus === PaymentStatus.PAID || p.paymentStatus === PaymentStatus.PARTIAL)
+      .reduce((acc, pay) => acc + Number(pay.paidAmount), 0);
 
-    const outstandingDues = payments.reduce((acc, pay) => acc + Number(pay.remainingDue), 0);
-    const todayRevenue = payments
+    const totalOutstandingDues = allPayments.reduce((acc, pay) => acc + Number(pay.remainingDue), 0);
+    const monthlyOutstandingDues = allPayments
+      .filter((p) => p.createdAt >= targetMonthStart && p.createdAt <= targetMonthEnd)
+      .reduce((acc, pay) => acc + Number(pay.remainingDue), 0);
+
+    const todayRevenue = allPayments
       .filter(
-        (payment) =>
-          payment.paidAt >= todayStart &&
-          (payment.paymentStatus === PaymentStatus.PAID ||
-            payment.paymentStatus === PaymentStatus.PARTIAL),
+        (p) =>
+          p.paidAt >= todayStart &&
+          p.paidAt <= todayEnd &&
+          (p.paymentStatus === PaymentStatus.PAID || p.paymentStatus === PaymentStatus.PARTIAL),
       )
-      .reduce((total, payment) => total + Number(payment.paidAmount), 0);
+      .reduce((total, p) => total + Number(p.paidAmount), 0);
 
+    // Revenue Trend for 6 months up to target month
     const revenueByMonth = new Map<string, number>();
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const d = new Date(targetYear, targetMonthIndex - i, 1);
       const monthStr = d.toLocaleString('en-US', { month: 'short', year: 'numeric' });
       revenueByMonth.set(monthStr, 0);
     }
-    
-    recentMemberships.forEach((membership) => {
-      const monthStr = membership.startDate.toLocaleString('en-US', {
-        month: 'short',
-        year: 'numeric',
+
+    allPayments
+      .filter(
+        (p) =>
+          p.paidAt >= sixMonthsAgo &&
+          p.paidAt <= targetMonthEnd &&
+          (p.paymentStatus === PaymentStatus.PAID || p.paymentStatus === PaymentStatus.PARTIAL),
+      )
+      .forEach((pay) => {
+        const monthStr = new Date(pay.paidAt).toLocaleString('en-US', { month: 'short', year: 'numeric' });
+        if (revenueByMonth.has(monthStr)) {
+          revenueByMonth.set(monthStr, revenueByMonth.get(monthStr)! + Number(pay.paidAmount));
+        }
       });
-      if (revenueByMonth.has(monthStr)) {
-        revenueByMonth.set(
-          monthStr,
-          revenueByMonth.get(monthStr)! +
-            Number(membership.planPrice) +
-            Number(membership.admissionFee),
-        );
-      }
-    });
-    
+
     const revenueTrend = Array.from(revenueByMonth.entries()).map(([month, revenue]) => ({
       month,
       revenue,
     }));
 
+    // Weekly attendance pattern
     const attendanceByDay = new Map<string, number>();
     for (let i = 6; i >= 0; i--) {
       const d = new Date(todayStart);
@@ -122,28 +204,28 @@ export class DashboardService {
       }
     });
 
-    const attendancePattern = Array.from(attendanceByDay.entries())
-      .map(([date, count]) => ({ date, count }));
+    const attendancePattern = Array.from(attendanceByDay.entries()).map(([date, count]) => ({ date, count }));
 
-    // Get membership distribution
+    // Membership plan distribution
     const planCounts = new Map<string, number>();
     activeMembershipsData.forEach((ms) => {
       const name = ms.plan?.name || 'Unknown';
       planCounts.set(name, (planCounts.get(name) || 0) + 1);
     });
 
-    const totalActive = activeMembershipsData.length;
+    const totalActiveInPeriod = activeMembershipsData.length;
     const membershipDistribution = Array.from(planCounts.entries())
       .map(([plan, count]) => ({
         plan,
         count,
-        percentage: totalActive > 0 ? Math.round((count / totalActive) * 100) : 0,
+        percentage: totalActiveInPeriod > 0 ? Math.round((count / totalActiveInPeriod) * 100) : 0,
       }))
       .sort((a, b) => b.count - a.count);
 
+    // Member Growth
     const growthByMonth = new Map<string, number>();
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const d = new Date(targetYear, targetMonthIndex - i, 1);
       const monthStr = d.toLocaleString('en-US', { month: 'short', year: 'numeric' });
       growthByMonth.set(monthStr, 0);
     }
@@ -155,75 +237,57 @@ export class DashboardService {
       }
     });
 
-    // Accumulated total for the charts (not just new members that month, but total members that month)
-    // To be perfectly accurate we would need to count members created before each month minus deletions, 
-    // but for simplicity we will just do a running total from a base count.
     const baseCount = await this.prisma.member.count({
-      where: { createdAt: { lt: sixMonthsAgo } },
+      where: {
+        createdAt: { lt: sixMonthsAgo },
+        status: { not: MemberStatus.DELETED },
+      },
     });
 
     const memberGrowth = [];
     let currentTotal = baseCount;
-    const monthsArray = Array.from(growthByMonth.entries());
-    
-    for (const [month, count] of monthsArray) {
+    for (const [month, count] of growthByMonth.entries()) {
       currentTotal += count;
       memberGrowth.push({ month, members: currentTotal });
     }
 
-    const currentMonthMembers = recentMembers.filter((member) => member.createdAt >= monthStart).length;
-    const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const previousMonthMembers = recentMembers.filter(
-      (member) => member.createdAt >= previousMonthStart && member.createdAt < monthStart,
-    ).length;
-    const currentMonthRevenue = recentMemberships
-      .filter((membership) => membership.startDate >= monthStart)
-      .reduce((total, membership) => total + Number(membership.planPrice) + Number(membership.admissionFee), 0);
-    const previousMonthRevenue = recentMemberships
-      .filter((membership) => membership.startDate >= previousMonthStart && membership.startDate < monthStart)
-      .reduce((total, membership) => total + Number(membership.planPrice) + Number(membership.admissionFee), 0);
-    const yesterdayStart = new Date(todayStart);
-    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-    const yesterdayAttendance = recentAttendance.filter(
-      (attendance) => attendance.checkIn >= yesterdayStart && attendance.checkIn < todayStart,
-    ).length;
-    const currentMonthExpired = recentlyExpiredMemberships.filter(
-      (membership) => membership.updatedAt >= monthStart,
-    ).length;
-    const previousMonthExpired = recentlyExpiredMemberships.filter(
-      (membership) => membership.updatedAt >= previousMonthStart && membership.updatedAt < monthStart,
-    ).length;
-    const currentMonthDues = payments
-      .filter((payment) => payment.createdAt >= monthStart)
-      .reduce((total, payment) => total + Number(payment.remainingDue), 0);
-    const previousMonthDues = payments
-      .filter((payment) => payment.createdAt >= previousMonthStart && payment.createdAt < monthStart)
-      .reduce((total, payment) => total + Number(payment.remainingDue), 0);
     const percentageChange = (current: number, previous: number) =>
       previous === 0 ? (current === 0 ? 0 : 100) : Math.round(((current - previous) / previous) * 100);
 
     return {
+      // Monthly Specific Data (for current/selected month)
+      monthlyRevenue,
+      monthlyNewMembers,
+      monthlyExpiredMembers,
+      monthlyAttendance,
+      monthlyOutstandingDues,
+      // Daily
+      todayAttendance,
+      todayRevenue,
+      // Overall All-Time Data (for reports page)
+      totalRevenue,
       totalMembers,
       activeMembers,
       expiredMembers,
-      todayAttendance,
-      todayRevenue,
-      monthlyRevenue,
-      outstandingDues,
+      totalOutstandingDues,
       maleMembers,
       femaleMembers,
+      // Month Context
+      selectedMonth: targetMonthIndex + 1,
+      selectedYear: targetYear,
+      selectedMonthLabel: targetMonthStart.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
+      isCurrentMonth: targetYear === now.getFullYear() && targetMonthIndex === now.getMonth(),
       // Chart data
       revenueTrend,
       attendancePattern,
       membershipDistribution,
       memberGrowth,
+      // Comparisons
       changes: {
-        totalMembers: percentageChange(currentMonthMembers, previousMonthMembers),
-        activeMembers: percentageChange(currentMonthRevenue, previousMonthRevenue),
-        expiredMembers: percentageChange(currentMonthExpired, previousMonthExpired),
+        monthlyNewMembers: percentageChange(monthlyNewMembers, previousMonthNewMembers),
+        monthlyRevenue: percentageChange(monthlyRevenue, prevMonthRevenue),
+        monthlyExpiredMembers: percentageChange(monthlyExpiredMembers, previousMonthExpiredMembers),
         todayAttendance: percentageChange(todayAttendance, yesterdayAttendance),
-        monthlyRevenue: percentageChange(currentMonthRevenue, previousMonthRevenue),
-        outstandingDues: percentageChange(currentMonthDues, previousMonthDues),
       },
     };
   }

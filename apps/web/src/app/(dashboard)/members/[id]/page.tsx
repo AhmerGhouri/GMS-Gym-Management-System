@@ -85,13 +85,13 @@ export default function MemberDetailPage() {
   const attendance = Array.isArray(attendanceData) ? attendanceData : (attendanceData?.data || []);
 
   const { data: paymentsData } = useQuery({
-    queryKey: ['payments'],
+    queryKey: ['payments', memberId],
     queryFn: async () => {
-      const res = await api.get('/payments');
+      const res = await api.get('/payments', { params: { memberId } });
       return res.data;
     },
   });
-  const payments = (paymentsData?.data || []).filter((p: any) => p.memberId === memberId);
+  const payments = Array.isArray(paymentsData?.data) ? paymentsData.data : (Array.isArray(paymentsData) ? paymentsData : []);
 
   const { data: settingsData } = useQuery({
     queryKey: ['settings'],

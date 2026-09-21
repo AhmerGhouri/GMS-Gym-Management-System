@@ -1,0 +1,1 @@
+pg_dump -U postgres -F c -d postgres- -f backup_file.dump

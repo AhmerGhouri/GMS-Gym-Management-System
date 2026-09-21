@@ -3,6 +3,7 @@ import { PrismaService } from '../../core/database/prisma.service';
 import { PaymentStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ZkUserService } from '../device/services/zk-user.service';
+import { ExpirationService } from '../cron/expiration.service';
 
 @Injectable()
 export class PaymentsService {
@@ -10,19 +11,25 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly zkUser: ZkUserService,
+    private readonly expirationService: ExpirationService,
   ) {}
 
-  async getPayments() {
+  async getPayments(memberId?: string) {
     return this.prisma.payment.findMany({
+      where: memberId ? { memberId } : undefined,
       include: {
         member: true,
         membership: {
           include: { plan: true },
         },
       },
-      orderBy: { paidAt: 'desc' },
-      take: 100,
+      orderBy: { createdAt: 'desc' },
+      ...(memberId ? {} : { take: 500 }),
     });
+  }
+
+  async generateAdvanceInvoices(daysAhead: number = 7) {
+    return this.expirationService.generateAdvanceInvoices(daysAhead);
   }
 
   async updatePayment(
@@ -58,6 +65,7 @@ export class PaymentsService {
       const paidAmount = Number(payment.paidAmount) + data.paidAmount;
       updateData.paidAmount = paidAmount;
       updateData.remainingDue = Number(payment.totalAmount) - paidAmount;
+      updateData.paidAt = new Date();
 
       // Auto-set status based on paid amount
       if (paidAmount >= Number(payment.totalAmount)) {
@@ -72,6 +80,7 @@ export class PaymentsService {
     if (data.paymentStatus === 'PAID' && data.paidAmount === undefined) {
       updateData.paidAmount = payment.totalAmount;
       updateData.remainingDue = 0;
+      updateData.paidAt = new Date();
     }
 
     const updatedPayment = await this.prisma.payment.update({

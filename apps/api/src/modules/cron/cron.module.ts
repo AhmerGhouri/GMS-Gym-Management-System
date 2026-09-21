@@ -5,5 +5,6 @@ import { DeviceModule } from '../device/device.module';
 @Module({
   imports: [DeviceModule],
   providers: [ExpirationService],
+  exports: [ExpirationService],
 })
 export class CronModule {}

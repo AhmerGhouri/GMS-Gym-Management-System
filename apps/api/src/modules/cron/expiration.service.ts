@@ -47,14 +47,14 @@ export class ExpirationService {
             });
 
             // 2. Create a PENDING payment for the next billing cycle if not already created
-            const existingPending = await prisma.payment.findFirst({
+            const existingOpen = await prisma.payment.findFirst({
               where: {
                 membershipId: membership.id,
-                paymentStatus: 'PENDING',
+                paymentStatus: { in: ['PENDING', 'PARTIAL'] },
               },
             });
 
-            if (!existingPending) {
+            if (!existingOpen) {
               const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
               const planPrice = membership.planPrice;
 
@@ -70,7 +70,7 @@ export class ExpirationService {
                   remainingDue: planPrice,
                   paymentMethod: 'CASH',
                   paymentStatus: 'PENDING',
-                  paidAt: new Date(),
+                  notes: 'Membership expiration renewal invoice',
                 },
               });
             }
@@ -120,71 +120,100 @@ export class ExpirationService {
     }
   }
 
-  // Run at 1 AM every day to generate upcoming invoices 7 days before expiration
-  @Cron(CronExpression.EVERY_MINUTE)
+  // Run at 1 AM every day to generate upcoming invoices for memberships expiring within 7 days
+  @Cron('0 1 * * *')
   async handleUpcomingExpirations() {
     this.logger.log('Running daily upcoming expiration job (7 days before)...');
+    await this.generateAdvanceInvoices(7);
+  }
 
+  /**
+   * Generates advance renewal invoices for memberships expiring within `daysAhead` days.
+   * Can be called automatically by the cron job or triggered manually by administrators.
+   */
+  async generateAdvanceInvoices(daysAhead: number = 7) {
     const now = new Date();
-    const targetDateEnd = new Date();
-    targetDateEnd.setDate(targetDateEnd.getDate() + 7);
+    const targetDateEnd = new Date(now);
+    targetDateEnd.setDate(targetDateEnd.getDate() + daysAhead);
     targetDateEnd.setHours(23, 59, 59, 999);
 
+    // Find all ACTIVE memberships whose end date is within the window (or already due for renewal)
     const upcomingMemberships = await this.prisma.membership.findMany({
       where: {
         status: 'ACTIVE',
         endDate: {
-          gt: now,
           lte: targetDateEnd,
         },
       },
-      include: { plan: true },
+      include: {
+        plan: true,
+        member: { select: { id: true, memberId: true, firstName: true, lastName: true } },
+      },
     });
 
     if (upcomingMemberships.length === 0) {
-      this.logger.log('No upcoming memberships expiring in 7 days.');
-      return;
+      this.logger.log(`No memberships expiring within ${daysAhead} days.`);
+      return { totalFound: 0, createdCount: 0, skippedCount: 0, invoices: [] };
     }
 
-    this.logger.log(`Found ${upcomingMemberships.length} memberships expiring in 7 days.`);
+    this.logger.log(`Found ${upcomingMemberships.length} memberships expiring within ${daysAhead} days.`);
+
+    let createdCount = 0;
+    let skippedCount = 0;
+    const createdInvoices: any[] = [];
 
     for (const membership of upcomingMemberships) {
       try {
-        // Check if we already created a pending payment recently
-        const existingPending = await this.prisma.payment.findFirst({
+        // Prevent duplicate invoices: check if an open invoice (PENDING or PARTIAL) already exists
+        const existingOpen = await this.prisma.payment.findFirst({
           where: {
             membershipId: membership.id,
-            paymentStatus: 'PENDING',
+            paymentStatus: { in: ['PENDING', 'PARTIAL'] },
           },
         });
 
-
-        if (!existingPending) {
-          const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-          const planPrice = membership.planPrice;
-
-          await this.prisma.payment.create({
-            data: {
-              invoiceNumber,
-              memberId: membership.memberId,
-              membershipId: membership.id,
-              amount: planPrice,
-              discount: 0,
-              totalAmount: planPrice,
-              paidAmount: 0,
-              remainingDue: planPrice,
-              paymentMethod: 'CASH',
-              paymentStatus: 'PENDING',
-              paidAt: now,
-            },
-          });
-
-          this.logger.log(`Generated upcoming PENDING invoice for membership ${membership.id}`);
+        if (existingOpen) {
+          skippedCount++;
+          continue;
         }
+
+        const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+        const planPrice = Number(membership.planPrice);
+
+        const newPayment = await this.prisma.payment.create({
+          data: {
+            invoiceNumber,
+            memberId: membership.memberId,
+            membershipId: membership.id,
+            amount: planPrice,
+            discount: 0,
+            totalAmount: planPrice,
+            paidAmount: 0,
+            remainingDue: planPrice,
+            paymentMethod: 'CASH',
+            paymentStatus: 'PENDING',
+            notes: 'Advance renewal invoice',
+          },
+          include: {
+            member: { select: { firstName: true, lastName: true, memberId: true } },
+          },
+        });
+
+        createdInvoices.push(newPayment);
+        createdCount++;
+        this.logger.log(`Generated upcoming PENDING invoice ${invoiceNumber} for member ${membership.member?.memberId || membership.memberId}`);
       } catch (error) {
         this.logger.error(`Failed to generate upcoming invoice for membership ${membership.id}: ${(error as Error).message}`);
       }
     }
+
+    this.logger.log(`Advance invoice generation completed: ${createdCount} created, ${skippedCount} skipped (already had open invoices).`);
+    return {
+      totalFound: upcomingMemberships.length,
+      createdCount,
+      skippedCount,
+      invoices: createdInvoices,
+    };
   }
 
 }

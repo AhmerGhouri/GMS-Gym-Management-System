@@ -1,6 +1,6 @@
-import { Controller, Get, Patch, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../core/auth/guards/jwt-auth.guard';
 
 @ApiTags('Payments')
@@ -11,9 +11,17 @@ export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all payments' })
-  getPayments() {
-    return this.paymentsService.getPayments();
+  @ApiOperation({ summary: 'Get all payments or filter by member' })
+  @ApiQuery({ name: 'memberId', required: false })
+  getPayments(@Query('memberId') memberId?: string) {
+    return this.paymentsService.getPayments(memberId);
+  }
+
+  @Post('generate-advance')
+  @ApiOperation({ summary: 'Trigger advance invoice generation for upcoming expirations' })
+  @ApiQuery({ name: 'daysAhead', required: false, type: Number })
+  generateAdvance(@Query('daysAhead') daysAhead?: number) {
+    return this.paymentsService.generateAdvanceInvoices(daysAhead ? Number(daysAhead) : 7);
   }
 
   @Patch(':id')

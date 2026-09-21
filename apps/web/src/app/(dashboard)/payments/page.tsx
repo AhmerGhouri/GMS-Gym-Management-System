@@ -86,6 +86,32 @@ export default function PaymentsPage() {
     }
   });
 
+  const generateAdvanceMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post('/payments/generate-advance?daysAhead=7');
+      return res.data;
+    },
+    onSuccess: (data: any) => {
+      const created = data?.createdCount ?? 0;
+      const skipped = data?.skippedCount ?? 0;
+      toast({
+        title: 'Advance Invoices Processed',
+        description: `Generated ${created} new invoice(s). ${skipped} member(s) already had open invoices.`,
+        variant: 'success',
+      });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'stats'] });
+    },
+    onError: (err: any) => {
+      toast({
+        title: 'Generation Failed',
+        description: err.response?.data?.message || 'Failed to generate advance invoices.',
+        variant: 'destructive',
+      });
+    },
+  });
+
   const filteredPayments = payments.filter((payment: any) => {
     let matches = true;
     if (memberIdFilter && payment.memberId !== memberIdFilter) matches = false;
@@ -180,7 +206,15 @@ export default function PaymentsPage() {
           <h1 className="text-3xl font-bold tracking-tight text-white">Payments & Invoices</h1>
           <p className="text-slate-400">Track revenue, process payments, and manage outstanding dues.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button
+            className="bg-cyan-600 hover:bg-cyan-500 text-white gap-2 shadow-sm"
+            onClick={() => generateAdvanceMutation.mutate()}
+            disabled={generateAdvanceMutation.isPending}
+          >
+            <FileText className={`h-4 w-4 ${generateAdvanceMutation.isPending ? 'animate-spin' : ''}`} />
+            {generateAdvanceMutation.isPending ? 'Generating...' : 'Generate Advance Invoices'}
+          </Button>
           <Button
             variant="outline"
             className="border-slate-700 text-slate-300 hover:text-white gap-2"
