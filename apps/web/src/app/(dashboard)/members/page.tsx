@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Plus, Search, MoreHorizontal, FileDown, Eye, Trash2, ShieldAlert } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, FileDown, Eye, Trash2, ShieldAlert, AlertTriangle, AlertCircle, UserX } from 'lucide-react';
 import { api } from '@/lib/api/axios';
 import { Member, ApiResponse, PaginatedResult, MemberStatus } from '@gms/types';
 import { motion } from 'framer-motion';
@@ -13,6 +13,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import {
   Table,
   TableBody,
@@ -45,6 +52,8 @@ export default function MembersPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [isBulkActing, setIsBulkActing] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [isDeletingMember, setIsDeletingMember] = useState(false);
 
   const handleBulkAction = async (action: 'DELETE' | 'ACTIVE' | 'INACTIVE' | 'FROZEN') => {
     if (selectedMembers.length === 0) return;
@@ -398,17 +407,7 @@ export default function MembersPage() {
                           <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-800" />
                           <DropdownMenuItem
                             className="hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer text-rose-500 focus:bg-rose-50 dark:focus:bg-rose-500/10 focus:text-rose-600 dark:focus:text-rose-400"
-                            onClick={async () => {
-                              if (confirm('Are you sure you want to delete this member?')) {
-                                try {
-                                  await api.delete(`/members/${member.id}`);
-                                  toast({ title: 'Deleted', description: 'Member deleted.', variant: 'success' });
-                                  queryClient.invalidateQueries({ queryKey: ['members'] });
-                                } catch (err: any) {
-                                  toast({ title: 'Error', description: err.response?.data?.message || 'Failed to delete member.', variant: 'destructive' });
-                                }
-                              }
-                            }}
+                            onClick={() => setDeleteTarget(member)}
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete Member
@@ -452,6 +451,93 @@ export default function MembersPage() {
           </div>
         )}
       </motion.div>
+
+      {/* Strict Delete Member Options Dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent className="sm:max-w-[480px] bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+              <AlertTriangle className="h-5 w-5 text-rose-500" /> Delete Member Options
+            </DialogTitle>
+            <DialogDescription className="text-slate-500 dark:text-slate-400 pt-1">
+              Select how you would like to delete <span className="font-semibold text-slate-800 dark:text-slate-200">{deleteTarget?.firstName} {deleteTarget?.lastName}</span> ({deleteTarget?.memberId}).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            <div className="p-3.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 space-y-1">
+              <h4 className="font-semibold text-sm text-slate-900 dark:text-white">1. Deactivate / Soft Delete</h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Marks the member as deleted/inactive and revokes machine gate access, but preserves payment invoices and membership history for reporting.
+              </p>
+              <div className="pt-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isDeletingMember}
+                  onClick={async () => {
+                    if (!deleteTarget) return;
+                    setIsDeletingMember(true);
+                    try {
+                      await api.delete(`/members/${deleteTarget.id}`);
+                      toast({ title: 'Member Deactivated', description: 'Member has been deactivated.', variant: 'success' });
+                      queryClient.invalidateQueries({ queryKey: ['members'] });
+                      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+                      setDeleteTarget(null);
+                    } catch (err: any) {
+                      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to deactivate member.', variant: 'destructive' });
+                    } finally {
+                      setIsDeletingMember(false);
+                    }
+                  }}
+                  className="border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+                >
+                  Deactivate Member
+                </Button>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-lg border border-rose-200 dark:border-rose-900/40 bg-rose-50/50 dark:bg-rose-950/20 space-y-1">
+              <h4 className="font-semibold text-sm text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                <AlertCircle className="h-4 w-4" /> 2. Permanently Delete from Database
+              </h4>
+              <p className="text-xs text-rose-700 dark:text-rose-300/80">
+                Permanently deletes this member and completely removes all their memberships, invoices, payments, attendance logs, and gate machine users from the database. <strong>This will change monthly/total revenue. Cannot be undone!</strong>
+              </p>
+              <div className="pt-2">
+                <Button
+                  size="sm"
+                  disabled={isDeletingMember}
+                  onClick={async () => {
+                    if (!deleteTarget) return;
+                    setIsDeletingMember(true);
+                    try {
+                      await api.delete(`/members/${deleteTarget.id}/permanent`);
+                      toast({ title: 'Member Deleted', description: 'Member permanently deleted from database.', variant: 'success' });
+                      queryClient.invalidateQueries({ queryKey: ['members'] });
+                      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+                      setDeleteTarget(null);
+                    } catch (err: any) {
+                      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to delete member permanently.', variant: 'destructive' });
+                    } finally {
+                      setIsDeletingMember(false);
+                    }
+                  }}
+                  className="bg-rose-600 hover:bg-rose-500 text-white font-medium"
+                >
+                  {isDeletingMember ? 'Deleting...' : 'Permanently Delete From Database'}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2 border-t border-slate-200 dark:border-slate-800">
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={isDeletingMember}>
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

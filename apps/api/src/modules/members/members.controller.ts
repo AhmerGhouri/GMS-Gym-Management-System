@@ -83,4 +83,12 @@ export class MembersController {
   remove(@Param('id') id: string) {
     return this.membersService.remove(id);
   }
+
+  @Delete(':id/permanent')
+  @Roles(UserRole.GYM_MANAGER)
+  @Permissions('members.manage')
+  @ApiOperation({ summary: 'Permanently delete a member from database' })
+  permanentDelete(@Param('id') id: string) {
+    return this.membersService.permanentDelete(id);
+  }
 }

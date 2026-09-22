@@ -279,8 +279,60 @@ export class MembershipsService {
   }
 
   async deleteMembership(id: string) {
-    return this.prisma.membership.delete({
+    const membership = await this.prisma.membership.findUnique({
       where: { id },
+      include: { member: true },
     });
+    if (!membership) {
+      throw new NotFoundException('Membership not found');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Unlink payments referencing this membership so we don't violate foreign key constraints
+      await tx.payment.updateMany({
+        where: { membershipId: id },
+        data: { membershipId: null },
+      });
+
+      // 2. Delete membership activities
+      await tx.membershipActivity.deleteMany({
+        where: { membershipId: id },
+      });
+
+      // 3. Delete the membership
+      await tx.membership.delete({
+        where: { id },
+      });
+
+      // 4. Update member status if they have no other active memberships
+      const otherActive = await tx.membership.findFirst({
+        where: {
+          memberId: membership.memberId,
+          status: 'ACTIVE',
+          id: { not: id },
+        },
+      });
+
+      if (!otherActive && membership.member) {
+        await tx.member.update({
+          where: { id: membership.memberId },
+          data: { status: 'INACTIVE' },
+        });
+      }
+    });
+
+    // Disable device access if member has no remaining active memberships
+    if (membership.member) {
+      const remainingActive = await this.prisma.membership.count({
+        where: { memberId: membership.memberId, status: 'ACTIVE' },
+      });
+      if (remainingActive === 0) {
+        await this.zkUser.enqueueDisableOnAllDevices(membership.member.memberId);
+        this.logger.log(`Disabled device access after deleting membership for member ${membership.member.memberId}`);
+      }
+    }
+
+    this.logger.log(`Deleted membership ${id} for member ${membership.member?.memberId || membership.memberId}`);
+    return { success: true, message: 'Membership deleted successfully' };
   }
 }

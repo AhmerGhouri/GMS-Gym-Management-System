@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CreditCard, DollarSign, Search, FileText, CheckCircle, RefreshCw, Filter, X, Download } from 'lucide-react';
+import { CreditCard, DollarSign, Search, FileText, CheckCircle, RefreshCw, Filter, X, Download, Trash2, AlertTriangle } from 'lucide-react';
 import { api } from '@/lib/api/axios';
 import { formatCurrency, formatDate } from '@gms/utils';
 import { PaymentStatus } from '@gms/types';
@@ -56,6 +56,7 @@ export default function PaymentsPage() {
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [deleteInvoiceTarget, setDeleteInvoiceTarget] = useState<any>(null);
 
   const { data: paymentsData, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['payments'],
@@ -83,6 +84,23 @@ export default function PaymentsPage() {
     },
     onError: (err: any) => {
       toast({ title: 'Error', description: err.response?.data?.message || 'Failed to update payment.', variant: 'destructive' });
+    }
+  });
+
+  const deletePaymentMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.delete(`/payments/${id}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      toast({ title: 'Invoice Deleted', description: 'Invoice has been deleted and revenue reports updated.', variant: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setDeleteInvoiceTarget(null);
+    },
+    onError: (err: any) => {
+      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to delete invoice.', variant: 'destructive' });
     }
   });
 
@@ -373,18 +391,29 @@ export default function PaymentsPage() {
                     {getStatusBadge(p.paymentStatus)}
                   </TableCell>
                   <TableCell className="text-right">
-                    {p.paymentStatus !== 'PAID' ? (
+                    <div className="flex items-center justify-end gap-1.5">
+                      {p.paymentStatus !== 'PAID' ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-emerald-500/50 text-emerald-400 hover:bg-emerald-500 hover:text-white hover:border-emerald-500"
+                          onClick={() => openPaymentDialog(p)}
+                        >
+                          Process Pay
+                        </Button>
+                      ) : (
+                        <CheckCircle className="h-5 w-5 text-emerald-500 mr-1" />
+                      )}
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="h-8 border-emerald-500/50 text-emerald-400 hover:bg-emerald-500 hover:text-white hover:border-emerald-500"
-                        onClick={() => openPaymentDialog(p)}
+                        variant="ghost"
+                        className="h-8 w-8 p-0 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10"
+                        onClick={() => setDeleteInvoiceTarget(p)}
+                        title="Delete Invoice"
                       >
-                        Process Pay
+                        <Trash2 className="h-4 w-4" />
                       </Button>
-                    ) : (
-                      <CheckCircle className="h-5 w-5 text-emerald-500 ml-auto mr-3" />
-                    )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -444,6 +473,54 @@ export default function PaymentsPage() {
               className="bg-emerald-600 hover:bg-emerald-500 text-white"
             >
               {updatePaymentMutation.isPending ? 'Processing...' : 'Confirm Payment'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Strict Delete Invoice Confirmation Dialog */}
+      <Dialog open={!!deleteInvoiceTarget} onOpenChange={(open) => !open && setDeleteInvoiceTarget(null)}>
+        <DialogContent className="sm:max-w-[450px] bg-slate-900 border-slate-800 text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-400">
+              <AlertTriangle className="h-5 w-5 text-rose-500" />
+              Confirm Delete Invoice
+            </DialogTitle>
+            <DialogDescription className="text-slate-400 pt-2">
+              Are you sure you want to permanently delete invoice <span className="font-mono text-slate-200 font-semibold">{deleteInvoiceTarget?.invoiceNumber}</span>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2.5 py-3 text-sm text-slate-300 bg-slate-950/70 p-3 rounded-md border border-slate-800">
+            <div className="flex justify-between">
+              <span className="text-slate-400">Member:</span>
+              <span className="font-medium text-white">{deleteInvoiceTarget?.member?.firstName} {deleteInvoiceTarget?.member?.lastName || ''}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Total Billed:</span>
+              <span className="font-mono font-medium text-white">{formatCurrency(deleteInvoiceTarget?.totalAmount || 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Paid Amount:</span>
+              <span className="font-mono text-emerald-400">{formatCurrency(deleteInvoiceTarget?.paidAmount || 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Status:</span>
+              <span className="font-medium">{deleteInvoiceTarget?.paymentStatus}</span>
+            </div>
+            <div className="pt-2 text-xs text-rose-400/90 border-t border-slate-800">
+              ⚠️ Strict Note: Deleting this invoice will immediately adjust total revenue and monthly revenue reports. This action cannot be reversed.
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+            <Button variant="outline" onClick={() => setDeleteInvoiceTarget(null)} className="border-slate-700 hover:bg-slate-800 text-slate-300">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => deleteInvoiceTarget && deletePaymentMutation.mutate(deleteInvoiceTarget.id)}
+              disabled={deletePaymentMutation.isPending}
+              className="bg-rose-600 hover:bg-rose-500 text-white font-medium"
+            >
+              {deletePaymentMutation.isPending ? 'Deleting...' : 'Permanently Delete Invoice'}
             </Button>
           </div>
         </DialogContent>

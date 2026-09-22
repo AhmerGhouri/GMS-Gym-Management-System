@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../core/auth/guards/jwt-auth.guard';
@@ -31,5 +31,11 @@ export class PaymentsController {
     @Body() body: { paymentStatus?: string; paidAmount?: number; paymentMethod?: string },
   ) {
     return this.paymentsService.updatePayment(id, body as any);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a payment invoice' })
+  deletePayment(@Param('id') id: string) {
+    return this.paymentsService.deletePayment(id);
   }
 }

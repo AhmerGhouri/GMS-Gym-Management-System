@@ -119,7 +119,10 @@ export class PaymentsService {
             const now = new Date();
             const durationDays = membership.plan?.durationDays || 30;
 
-            if (updatedPayment.paymentStatus === PaymentStatus.PAID) {
+            // Idempotency: ONLY extend the membership period when the invoice transitions from UNPAID -> PAID
+            const isNewlyPaid = updatedPayment.paymentStatus === PaymentStatus.PAID && payment.paymentStatus !== PaymentStatus.PAID;
+
+            if (isNewlyPaid) {
               // The renewal cycle continues from the membership's previous cycle end date anchored to joining date
               let startDate = membership.endDate ? new Date(membership.endDate) : (updatedPayment.member?.joiningDate ? new Date(updatedPayment.member.joiningDate) : new Date());
               let endDate = new Date(startDate);
@@ -142,6 +145,12 @@ export class PaymentsService {
                 },
               });
               this.logger.log(`Renewed membership ${membership.id} for member ${updatedPayment.member.memberId}: ${startDate.toISOString()} → ${endDate.toISOString()}`);
+            } else if (updatedPayment.paymentStatus === PaymentStatus.PAID) {
+              // Already paid invoice was updated (e.g. notes or method) — keep active without shifting dates again
+              await this.prisma.membership.update({
+                where: { id: membership.id },
+                data: { status: 'ACTIVE' },
+              });
             } else {
               // Partial payment: ensure status is ACTIVE and cycle dates are aligned with joining date cycle
               let startDate = membership.endDate ? new Date(membership.endDate) : (updatedPayment.member?.joiningDate ? new Date(updatedPayment.member.joiningDate) : new Date());
@@ -219,5 +228,23 @@ export class PaymentsService {
     }
 
     return updatedPayment;
+  }
+
+  async deletePayment(id: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id },
+      include: { member: true, membership: true },
+    });
+
+    if (!payment) {
+      throw new NotFoundException(`Payment with ID ${id} not found`);
+    }
+
+    await this.prisma.payment.delete({
+      where: { id },
+    });
+
+    this.logger.log(`Deleted payment/invoice ${payment.invoiceNumber} (ID: ${id}) for member ${payment.member?.memberId || payment.memberId}`);
+    return { success: true, message: `Invoice ${payment.invoiceNumber} deleted successfully` };
   }
 }

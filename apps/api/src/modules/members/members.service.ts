@@ -348,5 +348,52 @@ export class MembersService {
     this.logger.log(`Bulk action ${action} performed on ${memberIds.length} members`);
     return { message: `Successfully updated ${memberIds.length} members` };
   }
+
+  async permanentDelete(id: string) {
+    const member = await this.prisma.member.findUnique({
+      where: { id },
+    });
+    if (!member) {
+      throw new NotFoundException(`Member with ID ${id} not found`);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Delete gate access logs
+      await tx.gateAccessLog.deleteMany({ where: { memberId: id } });
+
+      // 2. Delete sync jobs
+      await tx.syncJob.deleteMany({ where: { memberId: id } });
+
+      // 3. Delete attendance logs
+      await tx.attendanceLog.deleteMany({ where: { memberId: id } });
+
+      // 4. Delete payments
+      await tx.payment.deleteMany({ where: { memberId: id } });
+
+      // 5. Delete membership activities
+      await tx.membershipActivity.deleteMany({
+        where: { membership: { memberId: id } },
+      });
+
+      // 6. Delete memberships
+      await tx.membership.deleteMany({ where: { memberId: id } });
+
+      // 7. Delete notifications
+      await tx.notification.deleteMany({ where: { memberId: id } });
+
+      // 8. Delete the member permanently
+      await tx.member.delete({ where: { id } });
+    });
+
+    // Disable / remove user from all active ZKTeco devices
+    try {
+      await this.zkUser.enqueueDisableOnAllDevices(member.memberId);
+    } catch (e) {
+      this.logger.error(`Failed to remove member ${member.memberId} from devices: ${(e as Error).message}`);
+    }
+
+    this.logger.log(`Permanently deleted member ${member.memberId} (${member.firstName} ${member.lastName || ''}) from database`);
+    return { success: true, message: `Member ${member.memberId} was permanently deleted.` };
+  }
 }
 

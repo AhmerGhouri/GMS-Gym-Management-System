@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Edit2, Mail, Phone, MapPin, Calendar, CreditCard, Shield, Loader2, Clock } from 'lucide-react';
+import { ArrowLeft, Edit2, Mail, Phone, MapPin, Calendar, CreditCard, Shield, Loader2, Clock, Trash2, AlertTriangle, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import { Button } from '@/components/ui/button';
@@ -44,6 +44,7 @@ import { MemberStatus, MembershipStatus, PaymentStatus } from '@gms/types';
 
 export default function MemberDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const memberId = params.id as string;
   const initialTab = searchParams.get('tab') === 'membership' ? 'membership' : 'profile';
@@ -54,6 +55,15 @@ export default function MemberDetailPage() {
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [isAssigning, setIsAssigning] = useState(false);
   const [includeAdmissionFee, setIncludeAdmissionFee] = useState(false);
+
+  const [deleteMembershipTarget, setDeleteMembershipTarget] = useState<any>(null);
+  const [isDeletingMembership, setIsDeletingMembership] = useState(false);
+
+  const [deletePaymentTarget, setDeletePaymentTarget] = useState<any>(null);
+  const [isDeletingPayment, setIsDeletingPayment] = useState(false);
+
+  const [showDeleteMemberDialog, setShowDeleteMemberDialog] = useState(false);
+  const [isDeletingMember, setIsDeletingMember] = useState(false);
 
   const { data: memberData, isLoading: isLoadingMember } = useQuery({
     queryKey: ['member', memberId],
@@ -148,6 +158,54 @@ export default function MemberDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     } catch (err: any) {
       toast({ title: 'Error', description: err.response?.data?.message || 'Unable to update payment.', variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteMembership = async () => {
+    if (!deleteMembershipTarget) return;
+    setIsDeletingMembership(true);
+    try {
+      await api.delete(`/memberships/${deleteMembershipTarget.id}`);
+      toast({ title: 'Membership Deleted', description: 'Membership plan has been removed.', variant: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['member', memberId] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setDeleteMembershipTarget(null);
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to delete membership.', variant: 'destructive' });
+    } finally {
+      setIsDeletingMembership(false);
+    }
+  };
+
+  const handleDeletePayment = async () => {
+    if (!deletePaymentTarget) return;
+    setIsDeletingPayment(true);
+    try {
+      await api.delete(`/payments/${deletePaymentTarget.id}`);
+      toast({ title: 'Invoice Deleted', description: 'Invoice has been deleted and revenue adjusted.', variant: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['member', memberId] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setDeletePaymentTarget(null);
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to delete invoice.', variant: 'destructive' });
+    } finally {
+      setIsDeletingPayment(false);
+    }
+  };
+
+  const handlePermanentDeleteMember = async () => {
+    setIsDeletingMember(true);
+    try {
+      await api.delete(`/members/${memberId}/permanent`);
+      toast({ title: 'Member Deleted', description: 'Member permanently deleted from database.', variant: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      router.push('/members');
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to delete member permanently.', variant: 'destructive' });
+      setIsDeletingMember(false);
     }
   };
 
@@ -367,11 +425,20 @@ export default function MemberDetailPage() {
             </div>
           </div>
         </div>
-        <Link href={`/members/${memberId}/edit`}>
-          <Button className="bg-cyan-600 text-white hover:bg-cyan-500 shadow-md transition-all w-full sm:w-auto">
-            <Edit2 className="mr-2 h-4 w-4" /> Edit Member
+        <div className="flex items-center gap-2">
+          <Link href={`/members/${memberId}/edit`}>
+            <Button className="bg-cyan-600 text-white hover:bg-cyan-500 shadow-md transition-all w-full sm:w-auto">
+              <Edit2 className="mr-2 h-4 w-4" /> Edit Member
+            </Button>
+          </Link>
+          <Button
+            variant="outline"
+            className="border-rose-300 dark:border-rose-900/50 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+            onClick={() => setShowDeleteMemberDialog(true)}
+          >
+            <Trash2 className="mr-2 h-4 w-4" /> Delete Member
           </Button>
-        </Link>
+        </div>
       </motion.div>
 
       <Tabs defaultValue={initialTab} className="space-y-6">
@@ -504,14 +571,25 @@ export default function MemberDetailPage() {
                               )}
                             </TableCell>
                             <TableCell className="text-right">
-                              {ms.status === 'ACTIVE' ? (
-                                <Button size="sm" variant="outline" className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300" onClick={async () => {
-                                  try { await api.patch(`/memberships/${ms.id}`, { status: 'INACTIVE' }); queryClient.invalidateQueries({ queryKey: ['member', memberId] }); toast({ title: 'Membership Inactivated', description: 'You can now assign a different plan.', variant: 'success' }); }
-                                  catch (err: any) { toast({ title: 'Error', description: err.response?.data?.message || 'Unable to update membership.', variant: 'destructive' }); }
-                                }}>Inactivate</Button>
-                              ) : (
-                                <Button size="sm" className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200" onClick={() => toast({ title: 'Payment required', description: 'Mark the pending voucher paid from the Payments tab to activate this membership.', variant: 'destructive' })}>Activate</Button>
-                              )}
+                              <div className="flex items-center justify-end gap-1.5">
+                                {ms.status === 'ACTIVE' ? (
+                                  <Button size="sm" variant="outline" className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300" onClick={async () => {
+                                    try { await api.patch(`/memberships/${ms.id}`, { status: 'INACTIVE' }); queryClient.invalidateQueries({ queryKey: ['member', memberId] }); toast({ title: 'Membership Inactivated', description: 'You can now assign a different plan.', variant: 'success' }); }
+                                    catch (err: any) { toast({ title: 'Error', description: err.response?.data?.message || 'Unable to update membership.', variant: 'destructive' }); }
+                                  }}>Inactivate</Button>
+                                ) : (
+                                  <Button size="sm" className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200" onClick={() => toast({ title: 'Payment required', description: 'Mark the pending voucher paid from the Payments tab to activate this membership.', variant: 'destructive' })}>Activate</Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10"
+                                  onClick={() => setDeleteMembershipTarget(ms)}
+                                  title="Delete Membership"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -645,12 +723,23 @@ export default function MemberDetailPage() {
                             <TableCell>{getPaymentStatusBadge(payment.paymentStatus)}</TableCell>
                             <TableCell className="text-slate-700 dark:text-slate-300">{formatDate(payment.paidAt)}</TableCell>
                             <TableCell className="text-right">
-                              <Button size="sm" variant="outline" className="mr-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => printInvoice(payment)}>Invoice</Button>
-                              {payment.paymentStatus !== 'PAID' && payment.paymentStatus !== 'REFUNDED' && (
-                                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm" onClick={() => markPaymentPaid(payment.id)}>
-                                  Mark Paid
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button size="sm" variant="outline" className="mr-1 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => printInvoice(payment)}>Invoice</Button>
+                                {payment.paymentStatus !== 'PAID' && payment.paymentStatus !== 'REFUNDED' && (
+                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm" onClick={() => markPaymentPaid(payment.id)}>
+                                    Mark Paid
+                                  </Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10"
+                                  onClick={() => setDeletePaymentTarget(payment)}
+                                  title="Delete Invoice"
+                                >
+                                  <Trash2 className="h-4 w-4" />
                                 </Button>
-                              )}
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -735,6 +824,162 @@ export default function MemberDetailPage() {
                 )}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Strict Delete Membership Dialog */}
+      <Dialog open={!!deleteMembershipTarget} onOpenChange={(open) => !open && setDeleteMembershipTarget(null)}>
+        <DialogContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 sm:max-w-md text-slate-900 dark:text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+              <AlertTriangle className="h-5 w-5 text-rose-500" /> Confirm Delete Membership
+            </DialogTitle>
+            <DialogDescription className="text-slate-500 dark:text-slate-400 pt-1">
+              Are you sure you want to delete this membership plan?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-3 text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-950 p-3 rounded-md border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between">
+              <span className="text-slate-500 dark:text-slate-400">Plan Name:</span>
+              <span className="font-semibold text-slate-900 dark:text-white">{deleteMembershipTarget?.plan?.name || 'N/A'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500 dark:text-slate-400">Period:</span>
+              <span>{deleteMembershipTarget?.startDate ? formatDate(deleteMembershipTarget.startDate) : '—'} – {deleteMembershipTarget?.endDate ? formatDate(deleteMembershipTarget.endDate) : '—'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500 dark:text-slate-400">Status:</span>
+              <span>{deleteMembershipTarget?.status}</span>
+            </div>
+            <div className="pt-2 text-xs text-rose-600 dark:text-rose-400 border-t border-slate-200 dark:border-slate-800">
+              ⚠️ Strict Note: Deleting this membership will remove it from the member history. If this was the only active membership, the member will be marked inactive.
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <Button variant="outline" onClick={() => setDeleteMembershipTarget(null)} disabled={isDeletingMembership}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-rose-600 hover:bg-rose-500 text-white font-medium"
+              onClick={handleDeleteMembership}
+              disabled={isDeletingMembership}
+            >
+              {isDeletingMembership ? 'Deleting...' : 'Delete Membership'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Strict Delete Payment / Invoice Dialog */}
+      <Dialog open={!!deletePaymentTarget} onOpenChange={(open) => !open && setDeletePaymentTarget(null)}>
+        <DialogContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 sm:max-w-md text-slate-900 dark:text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+              <AlertTriangle className="h-5 w-5 text-rose-500" /> Confirm Delete Invoice
+            </DialogTitle>
+            <DialogDescription className="text-slate-500 dark:text-slate-400 pt-1">
+              Are you sure you want to permanently delete invoice <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">{deletePaymentTarget?.invoiceNumber}</span>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-3 text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-950 p-3 rounded-md border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between">
+              <span className="text-slate-500 dark:text-slate-400">Total Billed:</span>
+              <span className="font-mono font-semibold text-slate-900 dark:text-white">{formatCurrency(deletePaymentTarget?.totalAmount || 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500 dark:text-slate-400">Paid Amount:</span>
+              <span className="font-mono text-emerald-600 dark:text-emerald-400">{formatCurrency(deletePaymentTarget?.paidAmount || 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500 dark:text-slate-400">Status:</span>
+              <span>{deletePaymentTarget?.paymentStatus}</span>
+            </div>
+            <div className="pt-2 text-xs text-rose-600 dark:text-rose-400 border-t border-slate-200 dark:border-slate-800">
+              ⚠️ Strict Note: Deleting this invoice will immediately adjust the member balance and recalculate monthly/total gym revenue reports.
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <Button variant="outline" onClick={() => setDeletePaymentTarget(null)} disabled={isDeletingPayment}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-rose-600 hover:bg-rose-500 text-white font-medium"
+              onClick={handleDeletePayment}
+              disabled={isDeletingPayment}
+            >
+              {isDeletingPayment ? 'Deleting...' : 'Permanently Delete Invoice'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Strict Delete Member Options Dialog */}
+      <Dialog open={showDeleteMemberDialog} onOpenChange={setShowDeleteMemberDialog}>
+        <DialogContent className="sm:max-w-[480px] bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+              <AlertTriangle className="h-5 w-5 text-rose-500" /> Delete Member Options
+            </DialogTitle>
+            <DialogDescription className="text-slate-500 dark:text-slate-400 pt-1">
+              Select how you would like to delete <span className="font-semibold text-slate-800 dark:text-slate-200">{member.firstName} {member.lastName}</span> ({member.memberId}).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            <div className="p-3.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 space-y-1">
+              <h4 className="font-semibold text-sm text-slate-900 dark:text-white">1. Deactivate / Soft Delete</h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Marks the member as deleted/inactive and revokes machine gate access, but preserves payment invoices and membership history for reporting.
+              </p>
+              <div className="pt-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isDeletingMember}
+                  onClick={async () => {
+                    setIsDeletingMember(true);
+                    try {
+                      await api.delete(`/members/${memberId}`);
+                      toast({ title: 'Member Deactivated', description: 'Member has been deactivated.', variant: 'success' });
+                      queryClient.invalidateQueries({ queryKey: ['members'] });
+                      router.push('/members');
+                    } catch (err: any) {
+                      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to deactivate member.', variant: 'destructive' });
+                      setIsDeletingMember(false);
+                    }
+                  }}
+                  className="border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+                >
+                  Deactivate Member
+                </Button>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-lg border border-rose-200 dark:border-rose-900/40 bg-rose-50/50 dark:bg-rose-950/20 space-y-1">
+              <h4 className="font-semibold text-sm text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                <AlertCircle className="h-4 w-4" /> 2. Permanently Delete from Database
+              </h4>
+              <p className="text-xs text-rose-700 dark:text-rose-300/80">
+                Permanently deletes this member and completely removes all their memberships, invoices, payments, attendance logs, and gate machine users from the database. <strong>Cannot be undone!</strong>
+              </p>
+              <div className="pt-2">
+                <Button
+                  size="sm"
+                  disabled={isDeletingMember}
+                  onClick={handlePermanentDeleteMember}
+                  className="bg-rose-600 hover:bg-rose-500 text-white font-medium"
+                >
+                  {isDeletingMember ? 'Deleting...' : 'Permanently Delete From Database'}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2 border-t border-slate-200 dark:border-slate-800">
+            <Button variant="ghost" onClick={() => setShowDeleteMemberDialog(false)} disabled={isDeletingMember}>
+              Cancel
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
